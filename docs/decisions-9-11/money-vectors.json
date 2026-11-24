@@ -1,0 +1,343 @@
+{
+  "E1_single_line": {
+    "unit_price_cents": 48900,
+    "quantity": 2,
+    "vat_rate_bps": 2100,
+    "line_net_cents": 97800,
+    "line_vat_cents": 20538,
+    "line_gross_cents": 118338
+  },
+  "E2_half_up_tie": {
+    "unit_price_cents": 25,
+    "quantity": 2,
+    "vat_rate_bps": 2100,
+    "line_net_cents": 50,
+    "line_vat_cents": 11,
+    "line_gross_cents": 61,
+    "note": "50 \u00d7 2100 / 10000 = 10.5 \u2192 11 (half-up); half-even would give 10"
+  },
+  "E3_round_per_line": {
+    "lines": [
+      {
+        "unit_price_cents": 50,
+        "quantity": 1,
+        "vat_rate_bps": 2100,
+        "line_net_cents": 50,
+        "line_vat_cents": 11,
+        "line_gross_cents": 61
+      },
+      {
+        "unit_price_cents": 50,
+        "quantity": 1,
+        "vat_rate_bps": 2100,
+        "line_net_cents": 50,
+        "line_vat_cents": 11,
+        "line_gross_cents": 61
+      }
+    ],
+    "net_cents": 100,
+    "vat_cents": 22,
+    "gross_cents": 122,
+    "commission_bps": 800,
+    "commission_cents": 8,
+    "payable_cents": 114,
+    "vat_breakdown": [
+      {
+        "rate_bps": 2100,
+        "net_cents": 100,
+        "vat_cents": 22
+      }
+    ],
+    "note": "\u03a3 rounded lines = 22; rounding the sum (100 \u00d7 21 %) would be 21 \u2014 we use 22"
+  },
+  "E4_mixed_vat": {
+    "lines": [
+      {
+        "unit_price_cents": 61200,
+        "quantity": 1,
+        "vat_rate_bps": 2100,
+        "line_net_cents": 61200,
+        "line_vat_cents": 12852,
+        "line_gross_cents": 74052
+      },
+      {
+        "unit_price_cents": 1350,
+        "quantity": 4,
+        "vat_rate_bps": 700,
+        "line_net_cents": 5400,
+        "line_vat_cents": 378,
+        "line_gross_cents": 5778
+      }
+    ],
+    "net_cents": 66600,
+    "vat_cents": 13230,
+    "gross_cents": 79830,
+    "commission_bps": 800,
+    "commission_cents": 5328,
+    "payable_cents": 74502,
+    "vat_breakdown": [
+      {
+        "rate_bps": 2100,
+        "net_cents": 61200,
+        "vat_cents": 12852
+      },
+      {
+        "rate_bps": 700,
+        "net_cents": 5400,
+        "vat_cents": 378
+      }
+    ]
+  },
+  "E5_three_supplier_checkout": {
+    "sub_orders": {
+      "A": {
+        "lines": [
+          {
+            "unit_price_cents": 48900,
+            "quantity": 2,
+            "vat_rate_bps": 2100,
+            "line_net_cents": 97800,
+            "line_vat_cents": 20538,
+            "line_gross_cents": 118338
+          },
+          {
+            "unit_price_cents": 61200,
+            "quantity": 1,
+            "vat_rate_bps": 2100,
+            "line_net_cents": 61200,
+            "line_vat_cents": 12852,
+            "line_gross_cents": 74052
+          }
+        ],
+        "net_cents": 159000,
+        "vat_cents": 33390,
+        "gross_cents": 192390,
+        "commission_bps": 800,
+        "commission_cents": 12720,
+        "payable_cents": 179670,
+        "vat_breakdown": [
+          {
+            "rate_bps": 2100,
+            "net_cents": 159000,
+            "vat_cents": 33390
+          }
+        ]
+      },
+      "B": {
+        "lines": [
+          {
+            "unit_price_cents": 750,
+            "quantity": 40,
+            "vat_rate_bps": 2100,
+            "line_net_cents": 30000,
+            "line_vat_cents": 6300,
+            "line_gross_cents": 36300
+          }
+        ],
+        "net_cents": 30000,
+        "vat_cents": 6300,
+        "gross_cents": 36300,
+        "commission_bps": 800,
+        "commission_cents": 2400,
+        "payable_cents": 33900,
+        "vat_breakdown": [
+          {
+            "rate_bps": 2100,
+            "net_cents": 30000,
+            "vat_cents": 6300
+          }
+        ]
+      },
+      "C": {
+        "lines": [
+          {
+            "unit_price_cents": 1920,
+            "quantity": 5,
+            "vat_rate_bps": 2100,
+            "line_net_cents": 9600,
+            "line_vat_cents": 2016,
+            "line_gross_cents": 11616
+          }
+        ],
+        "net_cents": 9600,
+        "vat_cents": 2016,
+        "gross_cents": 11616,
+        "commission_bps": 650,
+        "commission_cents": 624,
+        "payable_cents": 10992,
+        "vat_breakdown": [
+          {
+            "rate_bps": 2100,
+            "net_cents": 9600,
+            "vat_cents": 2016
+          }
+        ]
+      }
+    },
+    "order": {
+      "net_cents": 198600,
+      "vat_cents": 41706,
+      "gross_cents": 240306
+    },
+    "ledger_at_checkout": [
+      {
+        "supplier": "A",
+        "type": "sale",
+        "amount_cents": 192390
+      },
+      {
+        "supplier": "A",
+        "type": "commission",
+        "amount_cents": -12720
+      },
+      {
+        "supplier": "B",
+        "type": "sale",
+        "amount_cents": 36300
+      },
+      {
+        "supplier": "B",
+        "type": "commission",
+        "amount_cents": -2400
+      },
+      {
+        "supplier": "C",
+        "type": "sale",
+        "amount_cents": 11616
+      },
+      {
+        "supplier": "C",
+        "type": "commission",
+        "amount_cents": -624
+      }
+    ],
+    "balances_cents": {
+      "A": 179670,
+      "B": 33900,
+      "C": 10992
+    },
+    "platform_commission_cents": 15744
+  },
+  "E6_commission_rounding": [
+    {
+      "net_cents": 100,
+      "commission_bps": 650,
+      "commission_cents": 7,
+      "note": "6.5 \u2192 7 (half-up)"
+    },
+    {
+      "net_cents": 123457,
+      "commission_bps": 650,
+      "commission_cents": 8025,
+      "note": "8024.705 \u2192 8025"
+    },
+    {
+      "net_cents": 99,
+      "commission_bps": 800,
+      "commission_cents": 8,
+      "note": "7.92 \u2192 8"
+    }
+  ],
+  "E7_cancellation_reversal": {
+    "cancelled": "B",
+    "new_entries": [
+      {
+        "supplier": "B",
+        "type": "sale_reversal",
+        "amount_cents": -36300
+      },
+      {
+        "supplier": "B",
+        "type": "commission_reversal",
+        "amount_cents": 2400
+      }
+    ],
+    "balances_cents": {
+      "A": 179670,
+      "B": 0,
+      "C": 10992
+    },
+    "order_totals_unchanged": {
+      "net_cents": 198600,
+      "vat_cents": 41706,
+      "gross_cents": 240306
+    },
+    "amount_due_cents": 204006,
+    "proforma_v2": {
+      "net_cents": 168600,
+      "vat_cents": 35406,
+      "gross_cents": 204006
+    }
+  },
+  "E8_payment_status": [
+    {
+      "step": "checkout",
+      "paid_cents": 0,
+      "due_cents": 240306,
+      "status": "unpaid"
+    },
+    {
+      "step": "receipt 2,403.06",
+      "paid_cents": 240306,
+      "due_cents": 240306,
+      "status": "paid"
+    },
+    {
+      "step": "B cancelled",
+      "paid_cents": 240306,
+      "due_cents": 204006,
+      "status": "refund_due"
+    },
+    {
+      "step": "refund 363.00",
+      "paid_cents": 204006,
+      "due_cents": 204006,
+      "status": "paid"
+    },
+    {
+      "step": "all cancelled, nothing paid",
+      "paid_cents": 0,
+      "due_cents": 0,
+      "status": "unpaid"
+    }
+  ],
+  "E9_balance_split_and_payout": {
+    "A": {
+      "earned_cents": 179670,
+      "pending_cents": 0,
+      "payout_cents": -179670,
+      "balance_after_payout_cents": 0
+    },
+    "C": {
+      "earned_cents": 0,
+      "pending_cents": 10992,
+      "balance_cents": 10992
+    }
+  },
+  "E10_quantity_rules": [
+    {
+      "quantity": 3,
+      "min_order_qty": 6,
+      "order_step": 6,
+      "valid": false
+    },
+    {
+      "quantity": 6,
+      "min_order_qty": 6,
+      "order_step": 6,
+      "valid": true
+    },
+    {
+      "quantity": 10,
+      "min_order_qty": 6,
+      "order_step": 6,
+      "valid": false
+    },
+    {
+      "quantity": 12,
+      "min_order_qty": 6,
+      "order_step": 6,
+      "valid": true
+    }
+  ]
+}

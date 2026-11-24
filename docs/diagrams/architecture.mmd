@@ -1,0 +1,16 @@
+flowchart LR
+  U[Browser<br/>buyer · supplier · admin] -->|HTTPS| PX[Public proxy<br/>TLS · certbot]
+  PX -->|Tailscale| NG[Nginx<br/>basic auth on staging]
+  NG -->|127.0.0.1| WEB
+  subgraph APP[Docker Compose project per environment]
+    WEB["Next.js web<br/>Server Components · Server Actions<br/>route handlers (uploads, media, PDF, health)"]
+    WEB --> DOM["Domain layer (framework-free)<br/>policy · money · state machines · services"]
+    WRK["Worker (pg-boss)<br/>email · search sync · PDF · image sizes · CSV"] --> DOM
+    DOM --> PG[(PostgreSQL<br/>data · RLS · job queue)]
+    PG -->|jobs| WRK
+    DOM -->|searchProducts| MS[(Meilisearch)]
+    WRK --> MS
+    WEB --> MV[(Media volume<br/>images · invoice PDFs)]
+    WRK --> MV
+    WRK -->|SMTP| MAIL[Mailpit]
+  end

@@ -1,0 +1,21 @@
+flowchart TB
+  NET((Internet)) -->|HTTPS 443| PX["Friend's public server (shared Tailscale node)<br/>Nginx + certbot (TLS)<br/>horeca.bogdandelic.online<br/>staging.horeca.bogdandelic.online"]
+  PX -->|Tailscale| NG["Our Nginx<br/>Tailscale address only<br/>basic auth on staging · real client IP"]
+  GH[GitHub Actions] -->|Tailscale GitHub Action<br/>tag:ci → SSH only| DEP["deploy user<br/>deploy.sh env sha<br/>prunes old images"]
+  GHCR[(GHCR images)] --> DEP
+  NG -->|127.0.0.1:3000| PW
+  NG -->|127.0.0.1:3001| SW
+  subgraph PROD[horeca-prod]
+    PW[web] --- PK[worker]
+    PDB[(Postgres 16<br/>data + job queue)] --- PMS[(Meilisearch)]
+    PMV[(Media volume)] --- PMP[Mailpit]
+  end
+  subgraph STAGE[horeca-staging]
+    SW[web] --- SK[worker]
+    SDB[(Postgres 16<br/>data + job queue)] --- SMS[(Meilisearch)]
+    SMV[(Media volume)] --- SMP[Mailpit]
+  end
+  DEP --> PROD
+  DEP --> STAGE
+  PDB -.nightly + pre-deploy pg_dump.-> BK[(Backups on server)]
+  PMV -.nightly archive.-> BK

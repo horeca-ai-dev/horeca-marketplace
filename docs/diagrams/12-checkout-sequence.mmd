@@ -1,0 +1,42 @@
+%% Decision 11.8 — checkout. Everything between BEGIN and COMMIT is one Postgres transaction under RLS
+%% (buyer context). Side effects are pg-boss jobs enqueued INSIDE the same transaction (updated after the reviews).
+sequenceDiagram
+  autonumber
+  actor B as Buyer (owner or member)
+  participant UI as Checkout page
+  participant SA as Server Action (next-safe-action)
+  participant D as createOrder(source = cart)
+  participant PG as PostgreSQL (horeca_app, RLS)
+  participant Q as pg-boss queue (in PostgreSQL)
+  participant W as Worker (horeca_worker)
+
+  B->>UI: Place order (N sub-orders)
+  UI->>SA: idempotencyKey, deliveryLocationId, paymentMethod, notes
+  SA->>SA: Zod validate, resolveActor() from session + member re-check
+  SA->>PG: BEGIN, then set_config(app.user_id, app.org_id, app.org_type, app.role)
+  SA->>D: createOrder(tx, actor, input)
+  D->>PG: SELECT order WHERE (buyer_org_id, idempotency_key)
+  alt key already used
+    D-->>SA: same request_hash: existing order / different hash: Validation error
+  else new checkout
+    D->>PG: SELECT cart_items ... FOR UPDATE
+    D->>PG: SELECT products, supplier org_profiles (no FOR SHARE: under RLS it returns 0 rows for a buyer)
+    D->>D: revalidate every line: active, supplier approved, min qty + step, PricingResolver price = price seen, buyer tax ID differs from supplier tax ID
+    alt anything changed
+      D-->>SA: Conflict with changedLines (nothing written)
+    else all valid
+      D->>D: splitBySupplier(), money.ts: line VAT, totals, commission (app.resolve_commission_bps)
+      D->>PG: INSERT orders, sub_orders, order_lines, sub_order_events
+      D->>PG: INSERT ledger_entries (sale +gross, commission -commission) per sub-order
+      D->>PG: app.next_invoice_number() (sequence) then INSERT proforma_invoices (no PDF yet)
+      D->>PG: DELETE cart_items
+      D->>Q: enqueue(tx): mail buyer, mail each supplier, render pro-forma PDF (IDs only)
+    end
+  end
+  SA->>PG: COMMIT (rollback on any error: nothing persisted, no job queued)
+  SA-->>UI: ok + orderId, or error code + message + changedLines
+  Q->>W: email.orderConfirmation, email.newSubOrder x N (SMTP to Mailpit)
+  Q->>W: invoice.render(invoiceId)
+  W->>PG: withSystemTx: read invoice snapshot
+  W->>W: Playwright HTML to PDF (once)
+  W->>PG: UPDATE proforma_invoices SET storage_key (idempotent: skip if already set)

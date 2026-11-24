@@ -1,0 +1,50 @@
+<html><head><meta charset='utf-8'><style>
+*{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Arial;color:#1F2937;font-size:14px;background:#fff}
+.frame{width:1280px;border:1px solid #D9DDE3;background:#fff}
+.hdr{display:flex;align-items:center;gap:14px;padding:10px 20px;border-bottom:1px solid #D9DDE3;height:60px}
+.logo{font-weight:700;font-size:17px;color:#2B579A;white-space:nowrap}
+.search{flex:1;border:1px solid #D9DDE3;border-radius:6px;padding:8px 12px;color:#5B6472}
+.org{display:flex;align-items:center;gap:6px;border-radius:6px;padding:6px 10px;color:#fff;font-weight:600;font-size:13px;white-space:nowrap}
+.hlink{color:#2B579A;font-weight:600;white-space:nowrap}
+.side{width:210px;background:#F5F6F8;border-right:1px solid #D9DDE3;padding:16px 12px}
+.side a{display:block;padding:7px 10px;border-radius:6px;color:#1F2937;margin-bottom:2px}
+.side a.on{background:#DCE6F5;color:#2B579A;font-weight:600}
+.wrap{padding:20px 22px}
+h1{font-size:22px;margin:0 0 4px} h2{font-size:16px;margin:0 0 10px} .muted{color:#5B6472} .small{font-size:12px}
+.card{border:1px solid #D9DDE3;border-radius:10px;padding:14px 16px;background:#fff}
+.btn{display:inline-block;border-radius:6px;padding:7px 12px;font-weight:600;font-size:13px;border:1px solid #2B579A;color:#2B579A;background:#fff;white-space:nowrap}
+.btn.p{background:#2B579A;color:#fff} .btn.d{border-color:#B3261E;color:#B3261E} .btn.g{border-color:#D9DDE3;color:#5B6472}
+.badge{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;white-space:nowrap}
+.pending{background:#FFF1D6;color:#8A5A00} .confirmed{background:#DCE6F5;color:#2B579A} .shipped{background:#ECE6F8;color:#5B3FA0}
+.delivered{background:#E3F4EA;color:#1E7A4C} .cancelled{background:#FBE3E0;color:#B3261E}
+.unpaid{background:#FFF1D6;color:#8A5A00} .paid{background:#E3F4EA;color:#1E7A4C}
+table{border-collapse:collapse;width:100%} th{background:#DCE6F5;text-align:left;font-size:12.5px;padding:8px 9px;color:#1F2937}
+td{padding:8px 9px;border-bottom:1px solid #EEF0F3;vertical-align:top} .r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.b{font-weight:700} .kpi{flex:1} .kpi .v{font-size:24px;font-weight:700;color:#2B579A;font-variant-numeric:tabular-nums} .kpi .l{color:#5B6472;font-size:12.5px;margin-top:2px}
+.chip{display:inline-block;background:#DCE6F5;color:#2B579A;border-radius:999px;padding:3px 10px;font-size:12px;margin-right:6px}
+.note{font-size:12px;color:#5B6472;margin-top:8px;line-height:1.45}
+.prop{border:1.5px dashed #6B3FA0;background:#FBF8FE} .proptag{color:#6B3FA0;font-size:11.5px;font-weight:700}
+.img{background:#E9EDF3;border-radius:8px;height:126px;display:flex;align-items:center;justify-content:center;color:#8A94A3;font-size:12px}
+.facet{display:flex;justify-content:space-between;padding:3px 0} .cnt{color:#5B6472;font-size:12px}
+</style></head><body><div class='frame' style='width:1280px'><div class='hdr'><div class='logo'>HoReCa Marketplace</div><div class='search'>🔍 Search products…</div><div class='org' style='background:#0F766E'>🏭 Supplier · Gastro Oprema d.o.o. ▾</div><div class='hlink'>Account ▾</div></div>
+    <div style='display:flex'><div class='side'><a class='on'>Dashboard</a><a>My products</a><a>CSV import</a><a>Sub-orders</a><a>Ledger</a><a>Company &amp; bank details</a></div>
+    <div class='wrap' style='flex:1'><h1>Dashboard</h1><div class='muted' style='margin-bottom:14px'>Owner view · you see only your own sub-orders</div>
+    <div style='display:flex;gap:18px;align-items:flex-start'>
+     <div style='flex:1.45'><div class='card' style='padding:0;overflow:hidden'><div style='padding:10px 12px'><h2 style='margin:0'>Sub-orders</h2></div>
+       <table><tr><th>Sub-order / buyer</th><th class='r'>Net</th><th>Status</th><th>Order paid</th><th class='r'>Actions (legal only)</th></tr><tr><td><b>ORD-2026-000123-1</b><div class='muted small'>Hotel Main</div></td><td class='r'>1.590,00 €</td><td><span class='badge pending'>● Pending</span></td><td><span class='badge unpaid'>Unpaid</span></td><td class='r'><span class='btn p'>Confirm</span> <span class='btn d'>Cancel…</span></td></tr><tr><td><b>ORD-2026-000127-1</b><div class='muted small'>Hotel Splendid</div></td><td class='r'>874,50 €</td><td><span class='badge confirmed'>● Confirmed</span></td><td><span class='badge paid'>Paid</span></td><td class='r'><span class='btn p'>Ship</span> <span class='btn d'>Cancel…</span></td></tr><tr><td><b>ORD-2026-000131-1</b><div class='muted small'>Cafe Luna</div></td><td class='r'>640,00 €</td><td><span class='badge shipped'>● Shipped</span></td><td><span class='badge unpaid'>Unpaid</span></td><td class='r'><span class='btn p'>Mark delivered</span></td></tr><tr><td><b>ORD-2026-000118-1</b><div class='muted small'>Hotel Adria</div></td><td class='r'>2.150,00 €</td><td><span class='badge delivered'>● Delivered</span></td><td><span class='badge paid'>Paid</span></td><td class='r'><span class='muted small'>—</span></td></tr><tr><td><b>ORD-2026-000104-1</b><div class='muted small'>Konoba Mare</div></td><td class='r'>960,00 €</td><td><span class='badge delivered'>● Delivered</span></td><td><span class='badge unpaid'>Unpaid</span></td><td class='r'><span class='muted small'>—</span></td></tr><tr><td><b>ORD-2026-000109-1</b><div class='muted small'>Bar Nord</div></td><td class='r'>300,00 €</td><td><span class='badge cancelled'>● Cancelled</span></td><td><span class='muted small'>—</span></td><td class='r'><span class='muted small'>—</span></td></tr></table></div>
+       <div class='note'>Buttons come from the state machine: pending → Confirm/Cancel · confirmed → Ship/Cancel · shipped → Mark delivered. Payment status is informational in the MVP (open question Q3).</div>
+       <div class='card' style='margin-top:14px'><h2>CSV import — under_counter_bad_rows.csv</h2>
+         <div style='display:flex;gap:16px;margin-bottom:8px'><div><b>20</b> <span class='muted small'>rows</span></div><div style='color:#1E7A4C'><b>12</b> <span class='small'>valid</span></div><div style='color:#B3261E'><b>8</b> <span class='small'>invalid</span></div></div>
+         <table><tr><th>Row</th><th>Column</th><th>Message</th></tr>
+         <tr><td>3</td><td>base_price</td><td>Price must be a positive number</td></tr><tr><td>5</td><td>capacity_l</td><td>capacity_l must be a number (l)</td></tr>
+         <tr><td>9</td><td>door_type</td><td>door_type must be one of: solid, glass</td></tr><tr><td>13</td><td>sku</td><td>Duplicate SKU in file (row 2)</td></tr></table>
+         <div style='display:flex;justify-content:space-between;margin-top:10px'><span class='btn g'>Download error CSV (8 rows)</span><span><span class='btn g'>Cancel</span> <span class='btn p'>Import 12 valid rows</span></span></div></div></div>
+     <div style='flex:1'><div class='card'><h2>Ledger — what the platform owes you</h2>
+       <table><tr><td>Balance</td><td class='r b' style='font-size:17px'>7.022,39 €</td></tr>
+       <tr><td class='small'>of which earned (delivered)</td><td class='r'>3.514,30 €</td></tr>
+       <tr><td class='small'>of which pending (not yet delivered)</td><td class='r'>3.508,09 €</td></tr>
+       <tr><td class='small b' style='color:#1E7A4C'>Ready for payout (delivered + paid)</td><td class='r b' style='color:#1E7A4C'>2.429,50 €</td></tr>
+       <tr><td class='small'>Platform commission 8,0 % on net (non-cancelled)</td><td class='r'>497,16 €</td></tr></table>
+       <div class='b small' style='margin-top:12px'>Recent entries</div><table><tr><td class='small'>ORD-2026-000123-1</td><td class='small'>sale</td><td class='r small'>1.923,90 €</td></tr><tr><td class='small'>ORD-2026-000123-1</td><td class='small'>commission</td><td class='r small'>−127,20 €</td></tr><tr><td class='small'>ORD-2026-000109-1</td><td class='small'>sale</td><td class='r small'>363,00 €</td></tr><tr><td class='small'>ORD-2026-000109-1</td><td class='small'>commission</td><td class='r small'>−24,00 €</td></tr><tr><td class='small'>ORD-2026-000109-1</td><td class='small'>sale reversal</td><td class='r small'>−363,00 €</td></tr><tr><td class='small'>ORD-2026-000109-1</td><td class='small'>commission reversal</td><td class='r small'>24,00 €</td></tr></table>
+       <div class='note'>+ = the platform owes you more. Checkout books sale (+gross) and commission (−); a cancellation books both reversals, so a cancelled sub-order sums to 0 (Bar Nord).</div></div></div>
+    </div></div></div></div><div style='font:12px Inter;color:#888;padding:6px 2px'>W3 — Supplier dashboard (supplier A, owner) · decisions 10.7, 11.5, 11.6</div></body></html>

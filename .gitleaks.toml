@@ -1,0 +1,12 @@
+title = "horeca-marketplace gitleaks config"
+
+# Use all of gitleaks' default rules.
+[extend]
+useDefault = true
+
+# .env.example holds only placeholders (change-me) and the public demo password.
+[allowlist]
+description = "Documented placeholder values"
+paths = [
+  '''^\.env\.example$''',
+]

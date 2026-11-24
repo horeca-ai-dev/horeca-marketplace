@@ -1,0 +1,137 @@
+%% Decision 11 — cart, orders, money. Sources: schema/orders.ts, schema/finance.ts.
+%% buyer_org_id / supplier_org_id are denormalised onto sub-order tables so every RLS policy is one comparison.
+erDiagram
+  organization ||--|| carts : "buyer org - one shared cart"
+  carts ||--o{ cart_items : contains
+  products ||--o{ cart_items : "added"
+  organization ||--o{ orders : "buyer places"
+  orders ||--|{ sub_orders : "one per supplier"
+  organization ||--o{ sub_orders : "supplier fulfils"
+  sub_orders ||--|{ order_lines : "snapshots"
+  products |o--o{ order_lines : "reference only (NULL for RFQ)"
+  sub_orders ||--o{ sub_order_events : history
+  orders ||--|{ proforma_invoices : "one at checkout (version column kept, always 1 in the MVP)"
+  orders ||--o{ order_payments : "buyer pays the platform"
+  sub_orders ||--o{ ledger_entries : "sale, commission, reversals"
+  organization ||--o{ ledger_entries : "supplier balance"
+
+  carts {
+    uuid id PK
+    text buyer_org_id UK
+  }
+  cart_items {
+    uuid id PK
+    uuid cart_id FK
+    text buyer_org_id FK
+    uuid product_id FK "UK with cart"
+    int quantity "min + step rules"
+    bigint unit_price_cents_seen "detects price changes"
+    text added_by_user_id FK
+  }
+  orders {
+    uuid id PK
+    text number UK "ORD-2026-000123 (sequence, gaps ok)"
+    text buyer_org_id FK
+    text placed_by_user_id FK
+    text idempotency_key "UK with buyer_org_id"
+    text request_hash
+    enum source "cart | rfq"
+    uuid rfq_quote_id "S5 seam"
+    enum payment_method "proforma | bank_transfer | card"
+    jsonb buyer_snapshot
+    jsonb delivery_snapshot
+    bigint net_cents "sum of sub-orders, frozen"
+    bigint vat_cents
+    bigint gross_cents
+    enum status "in_progress | completed | cancelled (derived)"
+    enum payment_status "unpaid | paid | refund_due (derived)"
+  }
+  sub_orders {
+    uuid id PK
+    uuid order_id FK
+    text number UK "ORD-2026-000123-1"
+    text buyer_org_id FK
+    text supplier_org_id FK "UK with order"
+    enum status "pending | confirmed | shipped | delivered | cancelled"
+    jsonb delivery_snapshot "copy - supplier never reads orders"
+    bigint net_cents
+    bigint vat_cents
+    bigint gross_cents
+    int commission_bps "snapshot: override or default"
+    bigint commission_cents "half-up, once"
+    enum order_payment_status "copy for the supplier"
+    text cancel_reason
+  }
+  order_lines {
+    uuid id PK
+    uuid sub_order_id FK
+    text buyer_org_id FK
+    text supplier_org_id FK
+    uuid product_id FK "NULL only for RFQ"
+    text sku "snapshot"
+    text name "snapshot"
+    bigint unit_price_cents "applied price"
+    enum price_source "base | tier | buyer | rfq"
+    int quantity
+    int vat_rate_bps "snapshot"
+    bigint line_net_cents "price x qty"
+    bigint line_vat_cents "half-up per line"
+    bigint line_gross_cents
+  }
+  sub_order_events {
+    bigint id PK
+    uuid sub_order_id FK
+    enum from_status
+    enum to_status
+    text actor_user_id FK "NULL = system"
+    text note
+    timestamptz created_at
+  }
+  proforma_invoices {
+    uuid id PK
+    uuid order_id FK "UK with version"
+    text buyer_org_id FK
+    int version
+    text number UK "PF-2026-000123 from a sequence"
+    jsonb issuer_snapshot "platform company + IBAN"
+    jsonb content_snapshot "per-supplier sections"
+    jsonb vat_breakdown
+    bigint gross_cents
+    date due_date
+    enum status "issued"
+    text storage_key "set once by PDF job"
+  }
+  order_payments {
+    uuid id PK
+    uuid order_id FK
+    text buyer_org_id FK
+    enum type "receipt | refund"
+    bigint amount_cents "positive"
+    text bank_reference
+    uuid payment_id "S6 seam"
+    text recorded_by_user_id FK "platform admin"
+  }
+  ledger_entries {
+    bigint id PK
+    text supplier_org_id FK
+    uuid sub_order_id FK "NULL for payout, adjustment"
+    enum type "sale | commission | sale_reversal | commission_reversal | payout | adjustment"
+    bigint amount_cents "plus = platform owes supplier"
+    text description
+    text created_by_user_id FK
+  }
+  settings {
+    text key PK "default_commission_bps, platform_company, invoice_due_days, vat_rates_bps"
+    jsonb value
+  }
+  audit_log {
+    uuid id PK
+    text actor_user_id FK
+    text actor_org_id
+    enum actor_org_type
+    text action "policy name"
+    text entity_type
+    text entity_id
+    jsonb before
+    jsonb after
+  }

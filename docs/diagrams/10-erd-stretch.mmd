@@ -1,0 +1,65 @@
+%% Stretch tables (design only; separate migrations after G3). Source: schema/stretch.ts.
+erDiagram
+  products ||--o{ price_tiers : "S1 volume tiers"
+  products ||--o{ buyer_prices : "S1 price for one buyer"
+  organization ||--o{ buyer_prices : "buyer"
+  organization ||--o{ rfq_requests : "S5 buyer asks"
+  rfq_requests ||--o{ rfq_invitations : "only invited suppliers see it"
+  rfq_requests ||--o{ rfq_quotes : "one per supplier"
+  rfq_quotes |o--o| orders : "accepted quote -> createOrder(source = rfq)"
+  orders ||--o{ payments : "S6 card attempts"
+  payments ||--o{ payment_events : "callbacks, deduped"
+  payments |o--o| order_payments : "succeeded -> receipt"
+
+  price_tiers {
+    uuid id PK
+    uuid product_id FK "UK with min_quantity"
+    int min_quantity "> 1"
+    bigint unit_price_cents
+  }
+  buyer_prices {
+    uuid id PK
+    uuid product_id FK
+    text buyer_org_id FK
+    bigint unit_price_cents
+    date valid_from
+    date valid_to "no overlap (EXCLUDE gist)"
+  }
+  rfq_requests {
+    uuid id PK
+    text buyer_org_id FK
+    uuid delivery_location_id FK
+    text title
+    int quantity
+    date deadline
+    enum status "open | quoted | accepted | closed | expired"
+  }
+  rfq_invitations {
+    uuid rfq_id PK
+    text supplier_org_id PK
+  }
+  rfq_quotes {
+    uuid id PK
+    uuid rfq_id FK "UK with supplier"
+    text supplier_org_id FK
+    bigint unit_price_cents
+    int vat_rate_bps
+    int lead_time_days
+    date valid_until
+    enum status "submitted | accepted | rejected | withdrawn | expired"
+  }
+  payments {
+    uuid id PK
+    uuid order_id FK
+    text provider_ref UK
+    text idempotency_key UK
+    enum status "created | pending | succeeded | failed | cancelled"
+    bigint amount_cents
+  }
+  payment_events {
+    bigint id PK
+    uuid payment_id FK
+    text provider_event_id UK "duplicate callback = no-op"
+    bool signature_valid "HMAC, constant time"
+    jsonb raw
+  }

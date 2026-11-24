@@ -1,0 +1,16 @@
+{
+  "name": "horeca-decisions-9-11",
+  "private": true,
+  "description": "Schema drafts for decisions 9-11 (verification only)",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "generate:mvp": "drizzle-kit generate --config drizzle.mvp.config.ts --name mvp",
+    "generate:full": "drizzle-kit generate --config drizzle.full.config.ts --name full"
+  },
+  "devDependencies": {
+    "drizzle-orm": "^0.45.4",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "^5.9.3",
+    "@types/node": "^26.6.6"
+  }
+}

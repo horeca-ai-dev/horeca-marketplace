@@ -1,0 +1,24 @@
+%% Decision 11.6 — sub-order state machine. One transition(subOrder, event, actor) function; every
+%% transition = conditional UPDATE + sub_order_events row + app.recompute_order() in ONE transaction.
+stateDiagram-v2
+  direction LR
+  [*] --> pending : checkout (buyer)<br/>ledger +sale / -commission<br/>mail: buyer confirmation, supplier new sub-order
+  pending --> confirmed : subOrder.confirm (supplier)<br/>mail: buyer
+  confirmed --> shipped : subOrder.ship (supplier)<br/>mail: buyer
+  shipped --> delivered : subOrder.deliver (supplier)<br/>mail: buyer
+  pending --> cancelled : subOrder.cancel (buyer, supplier, platform)<br/>ledger reversals<br/>mail: the other party
+  confirmed --> cancelled : subOrder.cancel (supplier, platform)<br/>ledger reversals<br/>mail: buyer
+  delivered --> [*]
+  cancelled --> [*]
+
+  note right of cancelled
+    Reason required. Buyer only while pending;
+    supplier before shipped; platform audited.
+    Illegal transition on own sub-order = 409.
+  end note
+  note left of delivered
+    orders.status (derived):
+    all cancelled = cancelled
+    all delivered or cancelled = completed
+    otherwise in_progress
+  end note

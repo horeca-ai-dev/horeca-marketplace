@@ -1,0 +1,9 @@
+flowchart LR
+  PR[PR opened / updated] --> CI["CI checks<br/>lint · format · typecheck · commitlint<br/>gitleaks · audit · unit · integration<br/>RLS SQL tests · migration check · build"]
+  CI --> REV[Review + rebase-merge]
+  REV --> IMG[Build image once<br/>tag = SHA → GHCR]
+  IMG --> STG[Staging: migrate → restart<br/>→ health → E2E smoke]
+  STG --> APR{Manual approval}
+  APR --> PROD[Production: backup → migrate<br/>→ restart → health]
+  PROD -->|healthy| TAG[Tag vX.Y.Z + GitHub Release]
+  PROD -->|unhealthy| RB[Manual: redeploy previous SHA]

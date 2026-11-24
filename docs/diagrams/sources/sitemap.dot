@@ -1,0 +1,69 @@
+digraph Sitemap {
+graph [fontname="Inter" rankdir=LR nodesep=0.22 ranksep=0.55 pad=0.4 bgcolor=white newrank=true compound=true
+       label=<<B>HoReCa B2B Marketplace — sitemap (v4)</B><BR/><FONT POINT-SIZE="12" COLOR="#555555">Screens from DESIGN.md · everything except the public pages requires login · the area is chosen by the ACTIVE organization's type (org switcher) · wrong area → not found<BR/>blue = MVP · orange = stretch (after G3) · purple dashed = proposed in REVIEW-FINDINGS (not yet in DESIGN.md)</FONT>>
+       labelloc=t labeljust=l fontsize=22];
+node [fontname="Inter" fontsize=11 shape=box style="rounded,filled" fillcolor="#DCE6F5" color="#2B579A" margin="0.18,0.07"];
+edge [color="#777777" arrowsize=0.7];
+
+subgraph cluster_public { label=<<B>Public</B> (only these pages)> fontsize=13 style="rounded,dashed" color="#999999" margin=14;
+  login [label="Login"]; register [label="Register\nBuyer OR Supplier company\n+ company data (one form)"];
+  forgot [label="Forgot / reset password\n(e-mail via job)"]; setup [label="Complete company setup\n(user without organization)"];
+}
+switcher [shape=ellipse fillcolor="#F5F6F8" color="#374151" label="Active organization\n(org badge + switcher;\nmembership re-checked)"];
+
+subgraph cluster_buyer { label=<<B>Buyer area</B>  /buyer  ·  owner + member> fontsize=13 style="rounded" color="#2B579A" margin=14;
+  bcat [label="Catalogue\nsearch (Meilisearch) · filters · facets\nstate in URL"]; bpd [label="Product detail\nattributes · images · price excl. VAT"];
+  bcart [label="Cart\ngrouped per supplier (= future sub-orders)\nshared by the org's members"];
+  bcheck [label="Checkout\ndelivery location · payment method\n(pro-forma default) · summary\n“Place order (N sub-orders)”\nchanged lines → re-confirm"];
+  bconf [label="Order confirmation"]; borders [label="My orders"];
+  bodet [label="Order detail\nsub-order statuses + timeline\npayment status · pro-forma PDF (v1, v2…)\ncancel a pending sub-order"];
+  bprof [label="Company profile\n& delivery locations"];
+  bcmp [label="S2 Compare (≤ 4)\nsame-category attributes" fillcolor="#FFF1D6" color="#B7791F"];
+  bnl [label="S4 NL search chips\n“Interpreted from your search”" fillcolor="#FFF1D6" color="#B7791F"];
+  brfq [label="S5 RFQ: create · invite suppliers\nlist · compare quotes · accept" fillcolor="#FFF1D6" color="#B7791F"];
+  bpay [label="S6 Card payment\nmock hosted page · status" fillcolor="#FFF1D6" color="#B7791F"];
+  bmem [label="S7 Members & invitations\n(owner)" fillcolor="#FFF1D6" color="#B7791F"];
+}
+
+subgraph cluster_supplier { label=<<B>Supplier area</B>  /supplier  ·  owner + member> fontsize=13 style="rounded" color="#0F766E" margin=14;
+  sdash [label="Dashboard\nPendingSupplierBanner if pending /\nrejected (re-apply) / suspended" fillcolor="#DDF1EE" color="#0F766E"];
+  sprod [label="My products\nlist · status draft/active/archived" fillcolor="#DDF1EE" color="#0F766E"];
+  sform [label="Product form\ngenerated from the category's\nattribute schema · images (≤ 8)" fillcolor="#DDF1EE" color="#0F766E"];
+  scsv [label="CSV import\none leaf category per file · template\nImportReport → “Import N valid rows”" fillcolor="#DDF1EE" color="#0F766E"];
+  ssub [label="Sub-orders\nlist (own only)" fillcolor="#DDF1EE" color="#0F766E"];
+  ssdet [label="Sub-order detail\nonly legal transition buttons\nitems · delivery snapshot · order paid? · timeline" fillcolor="#DDF1EE" color="#0F766E"];
+  sled [label="Ledger (owner)\nbalance · earned · pending\nready for payout" fillcolor="#DDF1EE" color="#0F766E"];
+  sprof [label="Company profile\n& bank details (IBAN, owner)" fillcolor="#DDF1EE" color="#0F766E"];
+  stier [label="S1 Price tiers\n& buyer prices" fillcolor="#FFF1D6" color="#B7791F"];
+  sai [label="S3 AI suggestion\non the product form" fillcolor="#FFF1D6" color="#B7791F"];
+  srfq [label="S5 RFQ inbox (invited)\n+ quote form" fillcolor="#FFF1D6" color="#B7791F"];
+  smem [label="S7 Members & invitations\n(owner)" fillcolor="#FFF1D6" color="#B7791F"];
+}
+
+subgraph cluster_admin { label=<<B>Admin area</B>  /admin  ·  platform organization> fontsize=13 style="rounded" color="#374151" margin=14;
+  aover [label="Overview\nKPI tiles" fillcolor="#E5E7EB" color="#374151"];
+  aappr [label="Supplier approval queue\napprove · reject (reason) · suspend · reinstate" fillcolor="#E5E7EB" color="#374151"];
+  acat [label="Categories & attributes\nadditive changes · deactivate" fillcolor="#E5E7EB" color="#374151"];
+  acom [label="Commission & ledgers\nper supplier: sales · rate · commission · owed\ndefault rate · override per supplier" fillcolor="#E5E7EB" color="#374151"];
+  aord [label="All orders\nfilters · admin cancel (audited)\narchive product (moderation)" fillcolor="#E5E7EB" color="#374151"];
+  aaud [label="Audit log" fillcolor="#E5E7EB" color="#374151"];
+  ajobs [label="Jobs  /admin/jobs\nqueue counts · failed · retry" fillcolor="#E5E7EB" color="#374151"];
+  apay [label="Record buyer payment / refund\n(REVIEW F3)" fillcolor="#EEE6F8" color="#6B3FA0" style="rounded,filled,dashed"];
+  apout [label="Record payout / adjustment\n(REVIEW F3)" fillcolor="#EEE6F8" color="#6B3FA0" style="rounded,filled,dashed"];
+  amem [label="S7 Members" fillcolor="#FFF1D6" color="#B7791F"];
+}
+
+register -> setup [style=dashed label=" step 2 failed" fontsize=9];
+login -> switcher; register -> switcher; setup -> switcher;
+switcher -> bcat [lhead=cluster_buyer label=" buyer org" fontsize=9];
+switcher -> sdash [lhead=cluster_supplier label=" supplier org" fontsize=9];
+switcher -> aover [lhead=cluster_admin label=" platform org" fontsize=9];
+
+bcat -> bpd; bpd -> bcart [label=" add" fontsize=9]; bcat -> bcart; bcart -> bcheck; bcheck -> bconf; bconf -> bodet; borders -> bodet;
+bcat -> bcmp [style=dashed]; bcat -> bnl [style=dashed]; bodet -> bpay [style=dashed];
+sdash -> sprod; sprod -> sform; sform -> sai [style=dashed]; sprod -> stier [style=dashed]; sdash -> scsv; sdash -> ssub; ssub -> ssdet; sdash -> sled; sdash -> sprof;
+aover -> aappr; aover -> acat; aover -> acom; aover -> aord; aover -> aaud; aover -> ajobs; aord -> apay [style=dashed]; acom -> apout [style=dashed];
+bcat -> borders; bcat -> bprof; bcat -> brfq [style=dashed]; bcat -> bmem [style=dashed];
+sdash -> srfq [style=dashed]; sdash -> smem [style=dashed]; aover -> amem [style=dashed];
+{rank=same; bcat; sdash; aover}
+}
