@@ -31,6 +31,7 @@ pnpm db:seed             # demo data
 pnpm dev                 # web app → http://localhost:3000
 pnpm worker:dev          # pg-boss worker (separate terminal)
 pnpm lint && pnpm typecheck && pnpm test     # before every push
+pnpm format              # Prettier (format:check in CI)
 pnpm test:integration    # Testcontainers (needs Docker)
 pnpm test:e2e            # Playwright
 pnpm search:reindex      # rebuild Meilisearch from Postgres
