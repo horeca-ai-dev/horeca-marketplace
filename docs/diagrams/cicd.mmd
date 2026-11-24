@@ -1,6 +1,6 @@
 flowchart LR
   PR[PR opened / updated] --> CI["CI checks<br/>lint · format · typecheck · commitlint<br/>gitleaks · audit · unit · integration<br/>RLS SQL tests · migration check · build"]
-  CI --> REV[Review + rebase-merge]
+  CI --> REV[Author rebase-merges<br/>once CI is green]
   REV --> IMG[Build image once<br/>tag = SHA → GHCR]
   IMG --> STG[Staging: migrate → restart<br/>→ health → E2E smoke]
   STG --> APR{Manual approval}

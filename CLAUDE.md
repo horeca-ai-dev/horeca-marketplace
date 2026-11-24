@@ -106,7 +106,7 @@ src/
 ## Git and process
 - Trunk-based. Branches `type/issue-short-desc` (`feat/14-csv-import`); types: feat, fix, refactor, test, docs, chore, ci, infra.
 - **Conventional Commits** (enforced by commitlint locally and in CI). Small commits. **Rebase-and-merge** (no squash) so both members' commits stay on `main`. Add `Co-authored-by:` when helping on the other's branch.
-- **One PR per feature slice** (2–3 per person per day), aim < 400 changed lines (excluding generated migrations and lockfiles). The other member approves. CI must be green. Branches need not be up to date with `main`. No force-push to `main`.
+- **One PR per feature slice** (2–3 per person per day), aim < 400 changed lines (excluding generated migrations and lockfiles). No required approval: CI must be green, then the **author merges**. The other member reads merged PRs daily ("do I understand what this does and why?"); Claude Code reviews when wanted. Branches need not be up to date with `main`. No force-push to `main`.
 - Fill in the PR template checklist honestly.
 - Significant decision → ADR in `docs/decisions/NNN-title.md` with rejected alternatives.
 
@@ -119,10 +119,10 @@ src/
 - Prefer boring, well-documented solutions. Match existing code style.
 - Respect the **gates and stretch order in `TASKS.md`**: no stretch work while the MVP gate is red; no new features after the feature freeze.
 - When reviewing: check authorization, transactions (`tx` usage), rounding, failure paths and tests first.
-- **Daily explain-back:** the reviewer of the day's hardest PR explains it to its author (20 min); stalled questions go into `docs/explain-back.md`.
+- **Daily explain-back:** the member who read the day's hardest PR explains it to its author (20 min); stalled questions go into `docs/explain-back.md`.
 
 ## Definition of Done (per task)
-Reviewed by the other member · lint, typecheck and tests green · tests for critical logic · authorization matrix updated if an action/route was added · spec/README/TASKS updated if a decision changed · no secrets · both members can explain it.
+Merged through a PR with green CI (read by the other member in the daily read) · lint, typecheck and tests green · tests for critical logic · authorization matrix updated if an action/route was added · spec/README/TASKS updated if a decision changed · no secrets · both members can explain it.
 
 ## Scope guard
 **Do not build** wishlists, reviews, loyalty programmes, chat, shipping integration, real payments, fiscalization, multi-currency or native apps. Stretch features only after the MVP gate, only as listed in `TASKS.md`.

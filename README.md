@@ -162,17 +162,18 @@ tests/              # unit/, integration/, e2e/
 - **E2E (Playwright):** smoke test after every staging deploy; full Definition-of-Done suite before each gate.
 
 ## Git workflow
-- `main` is protected: no direct pushes, no force-pushes; PR required with **1 approval** from the other member, green checks and linear history.
+- `main` is protected: no direct pushes, no force-pushes; PR required with green checks and linear history. **Required approvals: 0** — the author merges once CI is green.
+- Reviews (≈ 1h per person per day): a **light daily read of the other member's merged PRs** ("do I understand what this does and why?"), a Claude Code review when wanted, and the daily explain-back (`docs/explain-back.md`).
 - Branches: `type/issue-short-description` (e.g. `feat/14-csv-import`). Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `ci`, `infra`.
 - Commits: **Conventional Commits** (`feat(catalogue): validate CSV rows against attribute schema`).
-- Merge: **rebase-and-merge** (keeps both members' commits). Clean up WIP commits before review. Use `Co-authored-by:` when helping on the other's branch.
-- PRs: **one per feature slice** (2–3 per person per day), aim < 400 changed lines, link the tasks (`Closes #14`), fill in the template checklist. Branches need not be up to date with `main` before merging. Budget ≈ 1h per person per day for reviews.
+- Merge: **rebase-and-merge** (keeps both members' commits). Clean up WIP commits before merging. Use `Co-authored-by:` when helping on the other's branch.
+- PRs: **one per feature slice** (2–3 per person per day), aim < 400 changed lines, link the tasks (`Closes #14`), fill in the template checklist. Branches need not be up to date with `main` before merging.
 - Migration conflict after rebase: delete your generated migration, regenerate, commit.
 
 ### Toolset
 | Tool | Purpose | Runs |
 |---|---|---|
-| GitHub branch ruleset on `main` | PR + 1 approval + green checks + linear history; no direct/force push; "up to date" not required | GitHub |
+| GitHub branch ruleset on `main` | PR + green checks + linear history (0 required approvals — author merges); no direct/force push; "up to date" not required | GitHub |
 | Husky | Installs Git hooks for both members | Local |
 | lint-staged | `pre-commit`: ESLint + Prettier on staged files | Local |
 | commitlint (`@commitlint/config-conventional`) | `commit-msg`: Conventional Commits | Local + CI |
@@ -198,7 +199,7 @@ Local hooks can be skipped; CI re-runs every check and is what protects `main`.
 ```mermaid
 flowchart LR
   PR[PR opened / updated] --> CI["CI checks<br/>lint · format · typecheck · commitlint<br/>gitleaks · audit · unit · integration<br/>RLS SQL tests · migration check · build"]
-  CI --> REV[Review + rebase-merge]
+  CI --> REV[Author rebase-merges<br/>once CI is green]
   REV --> IMG[Build image once<br/>tag = SHA → GHCR]
   IMG --> STG[Staging: migrate → restart<br/>→ health → E2E smoke]
   STG --> APR{Manual approval}
@@ -311,7 +312,7 @@ Full ADRs: [`docs/decisions/`](docs/decisions/).
 - *(Add every stretch feature not finished by the feature freeze.)*
 
 ## Working with Claude
-Rules are in [`CLAUDE.md`](CLAUDE.md): spec first, review every change, never paste secrets, both members must explain all code.
+Rules are in [`CLAUDE.md`](CLAUDE.md): spec first, every change through a PR with green CI, never paste secrets, both members must explain all code.
 
 ## Team
 | Member | Focus |
