@@ -104,6 +104,8 @@ pnpm worker:dev                # second terminal
 ```
 Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the folder set in `MEDIA_DIR`.
 
+**Database logins:** on first start, `deploy/postgres/init/01-roles.sh` creates `horeca_owner` (owns the `horeca` database, runs migrations), `horeca_app` and `horeca_worker` from the `POSTGRES_*_PASSWORD` values in `.env`. The script runs **only on an empty data volume**. If you change those passwords, or want a clean database, reset the volumes with `docker compose -f docker-compose.dev.yml down -v`, which deletes all local data. All ports are bound to `127.0.0.1`.
+
 ### Environment (`.env.example`)
 | Variable | Purpose |
 |---|---|
