@@ -1,0 +1,70 @@
+# Local services: Postgres, Meilisearch, Mailpit. The app itself runs on the host (`pnpm dev`).
+# Values come from .env (copy .env.example). Every port is bound to 127.0.0.1 only.
+# Image versions are pinned exactly (newest patch at least two weeks old when chosen).
+name: horeca-dev
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16.15-trixie
+    environment:
+      # The image's superuser — used only by the init script, on an empty data directory.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # Read by deploy/postgres/init/01-roles.sh to create the three logins.
+      POSTGRES_OWNER_PASSWORD: ${POSTGRES_OWNER_PASSWORD:?set POSTGRES_OWNER_PASSWORD in .env}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?set POSTGRES_APP_PASSWORD in .env}
+      POSTGRES_WORKER_PASSWORD: ${POSTGRES_WORKER_PASSWORD:?set POSTGRES_WORKER_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Runs only when postgres-data is empty. Reset: docker compose -f docker-compose.dev.yml down -v
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # TCP on purpose: during init the server listens on the Unix socket only,
+      # so this stays unhealthy until the init script has finished.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    logging: *logging
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.56.2
+    environment:
+      MEILI_ENV: development
+      # Locally the master key doubles as the app's API key (see .env.example).
+      MEILI_MASTER_KEY: ${MEILI_API_KEY:?set MEILI_API_KEY in .env}
+      MEILI_NO_ANALYTICS: "true"
+    ports:
+      - "127.0.0.1:7700:7700"
+    volumes:
+      - meili-data:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7700/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    ports:
+      - "127.0.0.1:1025:1025" # SMTP
+      - "127.0.0.1:8025:8025" # web UI
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+
+volumes:
+  postgres-data:
+  meili-data:
