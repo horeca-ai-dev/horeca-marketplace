@@ -91,7 +91,7 @@ Consequence: any environment-specific value in a `NEXT_PUBLIC_*` variable (API U
 - `src/env.ts` validates all variables at startup — the app refuses to boot with a missing or malformed variable, and the health check fails before traffic is switched.
 
 ## Getting started
-**Prerequisites:** Node.js LTS, pnpm, Docker + Docker Compose, Git.
+**Prerequisites:** Node.js 26 (`.nvmrc`), pnpm (the version pinned in `package.json` → `packageManager`), Docker + Docker Compose, Git.
 ```bash
 git clone <repo-url> && cd horeca-marketplace
 cp .env.example .env           # fill values; never commit .env
@@ -133,7 +133,7 @@ Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the folder
 | One company, two organizations (buyer + supplier) | `multi@demo.local` | `Demo-1234!` |
 
 ## Scripts
-`pnpm dev` · `pnpm worker:dev` · `pnpm build` · `pnpm lint` · `pnpm typecheck` · `pnpm test` · `pnpm test:integration` · `pnpm test:e2e` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:reset` · `pnpm search:reindex`
+`pnpm dev` · `pnpm worker:dev` · `pnpm build` · `pnpm start` · `pnpm lint` · `pnpm typecheck` (`next typegen` + `tsc --noEmit`) · `pnpm format` · `pnpm format:check` · `pnpm test` · `pnpm test:integration` · `pnpm test:e2e` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:reset` · `pnpm search:reindex`
 
 ## Project structure
 ```
