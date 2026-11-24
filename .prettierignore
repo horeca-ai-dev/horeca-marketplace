@@ -1,0 +1,16 @@
+# Generated / installed
+pnpm-lock.yaml
+.next/
+out/
+build/
+coverage/
+playwright-report/
+test-results/
+next-env.d.ts
+
+# Planning documents and decision drafts are formatted by hand
+docs/
+*.md
+
+# Claude Code configuration
+.claude/
