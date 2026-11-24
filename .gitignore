@@ -5,6 +5,13 @@
 # Dependencies and build output
 node_modules/
 .next/
+/out/
+/build/
+*.tsbuildinfo
+next-env.d.ts
+*.pem
+.pnpm-debug.log*
+.vercel
 
 # Local media volume
 .media/
