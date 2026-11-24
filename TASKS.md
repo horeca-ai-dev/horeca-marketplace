@@ -7,13 +7,13 @@
 | **A** = @BogdanD3 | Infrastructure, CI/CD, database operations, frontend |
 | **B** = @MarkoBojovich | Domain layer, database schema & migrations, background jobs, seed data, E2E test suites |
 
-Task format: `- [ ] **D9-B1** (B · 4h)` = day 9, task 1, owner B, estimate. Estimates include reviewing Claude's output; plan ≈ 6 focused hours per person per day **plus ≈ 1h of reviewing the other member's PRs** (not in the estimates).
+Task format: `- [ ] **D9-B1** (B · 4h)` = day 9, task 1, owner B, estimate. Estimates include reviewing Claude's output; plan ≈ 6 focused hours per person per day **plus ≈ 1h of reading the other member's merged PRs** (not in the estimates).
 
 ## Workflow
 **Code flow** (details in README → Git workflow, CI/CD):
 1. Pick the next task → GitHub Issue → branch `type/issue-short-desc`. Related tasks of one feature may share one branch.
 2. Small Conventional Commits; Husky hooks run lint, format, commitlint, typecheck.
-3. **One PR per feature slice** (aim 2–3 per person per day) → CI green → the other member approves → rebase-and-merge. Branches do not have to be up to date with `main` before merging (CI runs on the merge result).
+3. **One PR per feature slice** (aim 2–3 per person per day) → CI green → the **author** rebase-and-merges (0 required approvals). Branches do not have to be up to date with `main` before merging (CI runs on the merge result).
 4. Merge deploys to **staging** automatically; an E2E **smoke test** runs there. The **full E2E suite** runs before each gate.
 5. **End of day:** check staging; if good, approve the pending production deploy (ships everything merged that day) → release tag is created automatically.
 
@@ -21,7 +21,8 @@ Task format: `- [ ] **D9-B1** (B · 4h)` = day 9, task 1, owner B, estimate. Est
 - **Contract first:** before a feature, B writes the domain function signatures and their Zod input/output schemas (`src/lib/schemas`); A builds the UI against stubs while B implements.
 - B owns `src/server/db` schema and migrations, so migrations never conflict.
 - If CI fails on your PR → fix on the same branch. If staging is broken after a merge → new branch, new PR.
-- **Daily explain-back (20 min, end of day):** the reviewer of the day's hardest PR explains it to its author. Questions that stall go into `docs/explain-back.md` — your rehearsal for the mentors.
+- **Reviews are light and after the merge:** each day, read the other member's merged PRs ("do I understand what this does and why?"); ask Claude Code for a review when wanted.
+- **Daily explain-back (20 min, end of day):** the member who read the day's hardest PR explains it to its author. Questions that stall go into `docs/explain-back.md` — your rehearsal for the mentors.
 - **By 16:00 on a heavy day,** decide what moves to the next morning — no working past midnight.
 - **Weekly Progress Report** (required by the programme, graded under Process): each member fills it in before every mentor check-in (≈ 20 min).
 
@@ -82,7 +83,7 @@ Whatever is not finished at G4 goes into README → Known limitations. If someth
   - After the first image push: check the GHCR package is **public**, or the server's first pull fails.
   - `next.config`: Cache Components off, `serverActions.allowedOrigins` with both domains — before the first page exists.
   - Pin pg-boss and Better Auth to exact versions and note them in CLAUDE.md.
-- [ ] **D2-A1** (A · 1h) Free GitHub organization `horeca-ai-dev` (both owners) + **public** repo `horeca-marketplace`; `main` ruleset (PR + 1 approval + checks + linear history; "up to date" **not** required); Environments `staging` / `production` (production: both required reviewers); PR template; Issues + Project board; commit the planning documents, `.env.example`, `.nvmrc`, pinned pnpm, `.editorconfig`, Dependabot (security only), gitleaks config.
+- [x] **D2-A1** (A · 1h) Free GitHub organization `horeca-ai-dev` (both owners) + **public** repo `horeca-marketplace`; `main` ruleset (PR + 0 required approvals + checks + linear history; "up to date" **not** required); Environments `staging` / `production` (production: both required reviewers); PR template; Issues + Project board; commit the planning documents, `.env.example`, `.nvmrc`, pinned pnpm, `.editorconfig`, Dependabot (security only), gitleaks config.
 - [ ] **D2-A2** (A · 1.5h) Next.js 16.4 + TS strict; ESLint (domain import boundary, `process.env` ban outside `src/env.ts`, `NEXT_PUBLIC_` ban); Prettier + Tailwind plugin; Husky + lint-staged + commitlint + `pre-push` typecheck.
 - [ ] **D2-A3** (A · 1h) `docker-compose.dev.yml`: Postgres 16 with an **init shell script** (it must read the passwords from env) that creates the three logins (`horeca_owner` = non-superuser, `horeca_app`, `horeca_worker`) and the database **owned by `horeca_owner`**; Meilisearch 1.56; Mailpit — all ports on `127.0.0.1`; exact image versions pinned. The init script runs **only on an empty data directory**, as the image's superuser (`POSTGRES_PASSWORD`), so `deploy.sh staging --reset` must remove the volume. The same script is used by Testcontainers and on the server.
 - [ ] **D2-A4** (A · 3h) Dockerfile: Node 26; Next.js `standalone` for web; **worker and migrate entries bundled separately (tsup/esbuild) with their own `node_modules`** (pg-boss, sharp, Playwright, Drizzle migrator, migrations folder); Chromium via `playwright install --with-deps chromium` + fonts with č ć š ž đ; build-time switch that skips env validation; media volume mount point; `src/env.ts`; `/api/health`.
