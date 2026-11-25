@@ -8,7 +8,7 @@ import { sql } from "drizzle-orm";
 import { PgBoss } from "pg-boss";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { env } from "@/env";
+import { env } from "@/env.core";
 import { closeDb } from "@/server/db/client";
 import { withSystemTx, withTx, type RlsContext } from "@/server/db/tx";
 import { stopWebBoss } from "@/server/jobs/boss";

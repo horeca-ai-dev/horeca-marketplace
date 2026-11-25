@@ -6,7 +6,7 @@
  * Templates (React Email) arrive with D6-B3; until then callers pass plain text (and optional HTML).
  */
 import nodemailer, { type Transporter } from "nodemailer";
-import { env } from "@/env";
+import { env } from "@/env.core";
 
 export type Email = {
   to: string;

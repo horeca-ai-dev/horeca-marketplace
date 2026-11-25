@@ -25,7 +25,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { organization } from "better-auth/plugins/organization";
-import { env } from "@/env";
+import { env } from "@/env.core";
 import { appDb } from "@/server/db/client";
 import { defaultOrganizationId } from "@/server/db/queries/membership";
 import * as schema from "@/server/db/schema";
