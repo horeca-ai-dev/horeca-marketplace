@@ -1,7 +1,7 @@
 /**
  * The single place that reads process.env (CLAUDE.md rule 14, enforced by ESLint).
  *
- * D2-B1 started this file with the database keys, D2-B2 added the Better Auth keys.
+ * D2-B1 started this file with the database keys, D2-B2 added the Better Auth keys, D2-B4 the e-mail keys.
  * D2-A4 (Bogdan) extends it with the remaining keys, Zod validation and the build-time switch.
  *
  * Each key is checked when it is READ, not when this file is imported. The migrate and worker
@@ -51,6 +51,14 @@ export const env = {
   /** "true" = anyone may register. Seed users are created server-side regardless. */
   get REGISTRATION_OPEN() {
     return process.env.REGISTRATION_OPEN === "true";
+  },
+  /** Sender of every e-mail, e.g. "HoReCa Marketplace <no-reply@…>". */
+  get EMAIL_FROM() {
+    return required("EMAIL_FROM");
+  },
+  /** SMTP server (Mailpit in every environment), e.g. smtp://127.0.0.1:1025. Worker only. */
+  get SMTP_URL() {
+    return required("SMTP_URL");
   },
   /** For dev tools that work without a value (drizzle-kit generate/check need no database). */
   has(
