@@ -99,14 +99,14 @@ Consequence: any environment-specific value in a `NEXT_PUBLIC_*` variable (API U
 
 ### Rules
 1. NO environment-specific values in `NEXT_PUBLIC_*`. Only values that are identical in every environment (e.g. app name) may use it.
-2. All config is read at RUNTIME on the server via `src/env.ts` (Zod-validated). Never read `process.env` directly elsewhere.
+2. All config is read at RUNTIME on the server via `src/env.ts` / `src/env.core.ts` (Zod-validated). Never read `process.env` directly elsewhere.
 3. If the browser needs a config value, a Server Component passes it down as a prop, or a route handler returns it.
-4. Secrets are server-only. `src/env.ts` imports `server-only`, so importing it from a Client Component fails the build.
+4. Secrets are server-only. `src/env.ts` imports `server-only`, so importing it from a Client Component fails the build. It re-exports `src/env.core.ts`, which has no `server-only` so that plain Node (worker, migrate, drizzle-kit, Vitest) can load it; ESLint keeps `src/app` and `src/components` on `src/env.ts`.
 
 ### Enforcement
-- ESLint `no-restricted-syntax`: bans `process.env` outside `src/env.ts`.
+- ESLint `no-restricted-properties`: bans `process.env` outside `src/env.core.ts`.
 - ESLint/CI check: bans `NEXT_PUBLIC_` except an explicit allowlist.
-- `src/env.ts` validates all variables at startup — the app refuses to boot with a missing or malformed variable, and the health check fails before traffic is switched.
+- `assertEnv("web" | "worker" | "migrate")` validates every variable an entry point needs at startup (web: `src/instrumentation.ts`) — the container refuses to boot with a missing or malformed variable and lists all problems at once (names only, never values), so the health check fails before traffic is switched. `SKIP_ENV_VALIDATION=1` (Docker build stage) and `next build` skip it.
 
 ## Getting started
 **Prerequisites:** Node.js 26 (`.nvmrc`), pnpm (the version pinned in `package.json` → `packageManager`), Docker + Docker Compose, Git.
@@ -158,7 +158,7 @@ Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the folder
 | One company, two organizations (buyer + supplier) | `multi@demo.local` | `Demo-1234!` |
 
 ## Scripts
-`pnpm dev` · `pnpm worker:dev` · `pnpm build` · `pnpm start` · `pnpm lint` · `pnpm typecheck` (`next typegen` + `tsc --noEmit`) · `pnpm format` · `pnpm format:check` · `pnpm test` · `pnpm test:integration` · `pnpm test:e2e` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:reset` · `pnpm search:reindex`
+`pnpm dev` · `pnpm worker:dev` · `pnpm build` · `pnpm build:entries` (bundles worker + migrate into `dist/`) · `pnpm start` · `pnpm lint` · `pnpm typecheck` (`next typegen` + `tsc --noEmit`) · `pnpm format` · `pnpm format:check` · `pnpm test` · `pnpm test:integration` · `pnpm test:e2e` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:reset` · `pnpm search:reindex`
 
 ## Project structure
 ```
@@ -173,7 +173,9 @@ src/
     email/          # sendEmail() adapter (SMTP) + React Email templates
     storage/        # save / read / delete on the media volume
   lib/              # shared Zod schemas, formatting
-  env.ts            # runtime config (Zod, server-only)
+  env.core.ts       # runtime config (Zod, assertEnv) — the only reader of process.env
+  env.ts            # server-only re-export for Next.js code
+  instrumentation.ts # web startup: assertEnv("web")
   worker.ts         # worker entry point
 deploy/             # compose files (staging, prod), deploy.sh, Nginx site examples, backup script
 docs/               # specification/, decisions-9-11/ (schema drafts, matrix, money rules, RLS tests), decisions/ (ADRs), diagrams/
@@ -233,7 +235,15 @@ flowchart LR
   PROD -->|unhealthy| RB[Manual: redeploy previous SHA]
 ```
 - **PR checks** run in parallel on GitHub runners (target < 10 min); a new push cancels the stale run. *Migration check* = `drizzle-kit check` + applying all migrations to an empty database; *RLS SQL tests* = `rls_tests.sql` via `psql`.
-- **Image:** multi-stage Dockerfile, Next.js `output: 'standalone'`, one image with four entry points: web, worker, migrate, mock-services.
+- **Image:** multi-stage `Dockerfile`, Next.js `output: 'standalone'`, one image with four entry points (mock-services arrives with D6-A3). It runs as the non-root `node` user; the build needs no runtime variables (`SKIP_ENV_VALIDATION=1` in the build stage).
+
+  | Entry | Command | Notes |
+  |---|---|---|
+  | web | `node web/server.js` (default) | listens on `:3000`; needs the web variables (`assertEnv("web")`) |
+  | worker | `node dist/worker.mjs` | needs `DATABASE_WORKER_URL`, `SMTP_URL`, …; Chromium headless shell for PDFs |
+  | migrate | `node dist/migrate.mjs` | one-shot, `DATABASE_MIGRATE_URL` only; exits non-zero on failure |
+
+  Media volume → `/data/media` (`MEDIA_DIR`). The image has no `curl`: a Compose healthcheck uses `node -e "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"`. Run containers with `init: true` so signals reach Node.
 - **Migrations** run as a one-off `migrate` container using Drizzle's runtime migrator.
 - **Deploy** over SSH as the dedicated `deploy` user running `deploy.sh <env> <sha>`. The server is reachable only through Tailscale, so the deploy job first joins the tailnet with the official **Tailscale GitHub Action** (`tailscale/github-action@v4`) using **Tailscale federated identity (workload identity federation)** — no long-lived Tailscale secret. The workflow sets `permissions: id-token: write` and passes `oauth-client-id`, `audience` and `tags: tag:ci`. The federated credential trusts only GitHub jobs whose subject matches `repo:horeca-ai-dev/horeca-marketplace:environment:*` (the deploy jobs in the `staging` / `production` Environments). The tailnet grant allows `tag:ci` only `tcp:22` on the server's Tailscale IP. GitHub stores the SSH key (secret) and `TS_OAUTH_CLIENT_ID` + `TS_AUDIENCE` (identifiers, not sensitive) per Environment.
 - **E2E on staging:** a smoke test after every deploy; the full suite before each gate. Playwright runs from GitHub against the staging URL; basic-auth credentials are a GitHub Environment secret; tests create unique data per run.

@@ -32,6 +32,8 @@ pnpm auth:generate       # regenerate the Better Auth tables after changing its 
 pnpm db:seed             # demo data
 pnpm dev                 # web app → http://localhost:3000
 pnpm worker:dev          # pg-boss worker (separate terminal)
+pnpm build:entries       # bundle worker + migrate into dist/ (the Docker image runs these)
+docker build -t horeca:local .   # the one image: web (default), worker, migrate — see README → CI/CD
 pnpm lint && pnpm typecheck && pnpm test     # before every push
 pnpm format              # Prettier (format:check in CI)
 pnpm test:integration    # Testcontainers (needs Docker)
@@ -53,7 +55,8 @@ src/
     email/          # sendEmail() adapter (SMTP) + React Email templates
     storage/        # save / read / delete files on the media volume (the only file-system access)
   lib/              # Zod schemas shared by UI & domain, formatting helpers
-  env.ts            # the ONLY place that reads process.env
+  env.core.ts       # the ONLY place that reads process.env (Zod, assertEnv); plain-Node code imports this
+  env.ts            # server-only re-export of env.core — Next.js code (src/app, src/components) imports this
   worker.ts         # worker entry point
 ```
 
@@ -71,7 +74,7 @@ src/
 11. **Side effects run as jobs.** E-mails, search index updates, PDFs and image sizes are pg-boss jobs **enqueued inside the same transaction** (`enqueue(tx, …)`), so they exist exactly when the data commits. Job processors are idempotent (safe to run twice). **Payloads carry IDs only; every processor re-reads and re-checks state** — the pg-boss tables have no RLS and `horeca_app` can enqueue any job type, so a payload is untrusted input. pg-boss: its schema is installed and its queues created by the **migrate** container (owner); web and worker start with `migrate: false` (web also without supervision and scheduling); `enqueue(tx, …)` runs inside the Drizzle transaction. **No external call inside a transaction** (e-mail, Meilisearch, PDF, gateway, supplier API). In a **web request** only two external calls are allowed, each with a **2–3 s timeout**: the per-supplier **stock check** before the checkout transaction, and **`PaymentProvider.createPayment`** after it commits. Everything else (e-mail, search sync, PDF, submission to the supplier API, payment events) runs as a job.
 12. **Search only through `searchProducts()`.** Postgres is the source of truth. Meilisearch holds only visible products (approved supplier, active, not deleted); results are re-fetched from Postgres by ID. **Supplier and admin dashboards never query Meilisearch.**
 13. **Validation:** Zod at every boundary; shared schemas in `src/lib/schemas`. Attribute schemas are generated from attribute definitions; unknown keys are rejected. No mass assignment — never spread request input into an insert/update.
-14. **Configuration:** read env **only** through `src/env.ts` (Zod-validated, `server-only`). **Never introduce `NEXT_PUBLIC_*` variables** — they are frozen at build time and we build one image for staging and production. If the browser needs a value, pass it from a Server Component.
+14. **Configuration:** read env **only** through `src/env.ts` (Next.js code; `server-only`) or `src/env.core.ts` (code that the worker, migrate, drizzle-kit or Vitest also load) — both Zod-validated; each entry point calls `assertEnv(role)` at startup. **Never introduce `NEXT_PUBLIC_*` variables** — they are frozen at build time and we build one image for staging and production. If the browser needs a value, pass it from a Server Component.
 15. **Migrations:** Drizzle. Never edit a merged migration — add a new one. Production deploys take a `pg_dump` first; rollback is manual (redeploy the previous SHA, restore the dump if a migration broke data) — so migrations do **not** need to be backward-compatible. Migration conflict after rebase: delete your generated migration, regenerate, commit. ERD changes after gate G1 need an ADR. The **first** migration only creates the extension `ltree` (`pg_trgm` is not used — search is Meilisearch); RLS policies, roles' privileges and triggers are **SQL migrations in the same chain** (never a file re-run on every deploy) — a policy change is a new migration. Every new table gets RLS policies, a matrix entry and RLS tests in the same PR.
 16. **Errors:** domain code throws typed errors (`NotFound`, `Forbidden`, `Conflict`, `Validation`). Server Actions return `{ ok: false, code, message, fieldErrors? }`; route handlers return `application/problem+json`. Never swallow errors; log with pino; never send stack traces or internal IDs to the client.
 17. **Dependencies:** never add one without asking, saying why, and checking it is maintained. *`next-intl` is already decided by decision 012 (no need to ask again) — pin an exact version that is at least two weeks old when D3-A4 adds it.*
