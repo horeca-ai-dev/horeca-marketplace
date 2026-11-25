@@ -4,6 +4,7 @@
  *   withTx(actor, fn)     a user is acting          → horeca_app,    RLS context = the actor
  *   withUserTx(userId, fn) logged in, no organization yet (registration, "Complete company setup")
  *   withSystemTx(fn)      a worker job acting for no user → horeca_worker (worker process only)
+ *   withAnonymousReadTx(fn) no user at all, read only → horeca_app without context (/api/health only)
  *
  * The RLS context is set with `set_config(…, true)`: the `true` means "local to this transaction".
  * When the transaction ends the values are gone, so a pooled connection never carries the previous
@@ -63,6 +64,17 @@ export async function withUserTx<T>(
     await setRlsContext(tx, { userId });
     return fn(tx);
   });
+}
+
+/**
+ * No user at all — only /api/health (D2-A4). App login, READ ONLY, and no RLS context, so every
+ * tenant policy matches zero rows (fail closed). It may read only what horeca_app is granted outside
+ * RLS: the migration bookkeeping (migration 0002) and pg-boss job ages (pgboss-grants.ts).
+ */
+export async function withAnonymousReadTx<T>(
+  fn: (tx: Tx) => Promise<T>,
+): Promise<T> {
+  return appDb().transaction(fn, { accessMode: "read only" });
 }
 
 /**
