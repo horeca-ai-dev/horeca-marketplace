@@ -26,6 +26,10 @@ export default defineConfig(({ mode }) => {
         ? ["tests/integration/**/*.test.ts"]
         : ["src/**/*.test.ts"],
       environment: "node",
+      // Integration: a fresh Postgres container per run (see the file). Unit tests need no setup.
+      globalSetup: integration ? ["tests/integration/global-setup.ts"] : [],
+      // Container start + migrations + image pull on a first run.
+      hookTimeout: integration ? 180_000 : 10_000,
       // Integration tests share one database: run files one after another.
       fileParallelism: !integration,
       testTimeout: integration ? 30_000 : 5_000,

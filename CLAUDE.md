@@ -36,7 +36,7 @@ pnpm build:entries       # bundle worker + migrate into dist/ (the Docker image 
 docker build -t horeca:local .   # the one image: web (default), worker, migrate — see README → CI/CD
 pnpm lint && pnpm typecheck && pnpm test     # before every push
 pnpm format              # Prettier (format:check in CI)
-pnpm test:integration    # Testcontainers (needs Docker)
+pnpm test:integration    # Testcontainers: needs Docker running; starts its own Postgres (your dev database is not touched); Mailpit from Compose
 pnpm test:e2e            # Playwright
 pnpm search:reindex      # rebuild Meilisearch from Postgres
 ```

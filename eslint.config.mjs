@@ -42,9 +42,11 @@ const eslintConfig = defineConfig([
       "no-restricted-syntax": ["error", ...nextPublicBans],
     },
   },
-  // …except src/env.core.ts, the single place that reads process.env (NEXT_PUBLIC_ stays banned there too).
+  // …except src/env.core.ts, the single place that reads process.env (NEXT_PUBLIC_ stays banned there too),
+  // and the Testcontainers global setup, which does not read configuration: it WRITES the throw-away
+  // database's addresses for the test workers and the migrate child process (they inherit process.env).
   {
-    files: ["src/env.core.ts"],
+    files: ["src/env.core.ts", "tests/integration/global-setup.ts"],
     rules: {
       "no-restricted-properties": "off",
     },

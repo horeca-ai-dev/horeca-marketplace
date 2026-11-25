@@ -184,7 +184,7 @@ tests/              # unit/, integration/, e2e/
 
 ## Testing
 - **Unit / property (Vitest + fast-check):** money, order splitting, commission, state machines, CSV row validation, policy.
-- **Integration (Testcontainers):** real Postgres and Meilisearch — transactions and rollback, RLS (the SQL tests from `docs/decisions-9-11/tests/`, run with `psql`, edited only as `APPLIED.md` lists), authorization matrix (supplier A vs B, buyer A vs B, every role), search visibility, checkout locking.
+- **Integration (Testcontainers):** real Postgres (a fresh container per run: the same init script, then the migrate entry — see `tests/integration/global-setup.ts`; Meilisearch joins with D7)  — transactions and rollback, RLS (the SQL tests from `docs/decisions-9-11/tests/`, run with `psql`, edited only as `APPLIED.md` lists), authorization matrix (supplier A vs B, buyer A vs B, every role), search visibility, checkout locking.
 - **Money:** `money-vectors.json` worked examples as unit-test vectors + fast-check invariants.
 - **E2E (Playwright):** smoke test after every staging deploy; full Definition-of-Done suite before each gate.
 
