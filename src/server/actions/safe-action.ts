@@ -16,11 +16,14 @@
 import "server-only";
 import { createSafeActionClient } from "next-safe-action";
 import { resolveActor } from "@/server/auth/actor";
+import { getLogger } from "@/server/logger";
 import {
   DomainError,
   Validation,
   type FieldErrors,
 } from "@/server/domain/errors";
+
+const log = getLogger("action");
 
 export type ActionError = {
   ok: false;
@@ -42,8 +45,8 @@ export const actionClient = createSafeActionClient({
     }
     if (error instanceof DomainError)
       return { ok: false, code: error.code, message: error.message };
-    // Unknown error: log it on the server (pino from D3-B3); tell the user nothing internal.
-    console.error("[action] unexpected error", error);
+    // Unknown error: log it on the server; tell the user nothing internal.
+    log.error({ err: error }, "unexpected error");
     return {
       ok: false,
       code: "INTERNAL",

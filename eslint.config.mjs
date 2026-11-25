@@ -52,6 +52,12 @@ const eslintConfig = defineConfig([
     },
   },
 
+  // Logging goes through src/server/logger.ts (pino, D3-B3): no console.* in application code or tests.
+  {
+    files: ["src/**/*.{ts,tsx}", "tests/**/*.ts"],
+    rules: { "no-console": "error" },
+  },
+
   // Next.js-only code reads configuration through src/env.ts (`server-only`), never env.core directly,
   // so a Client Component that imports configuration fails the build.
   {

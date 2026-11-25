@@ -15,6 +15,9 @@
  */
 import { PgBoss } from "pg-boss";
 import { env } from "@/env.core";
+import { getLogger } from "@/server/logger";
+
+const log = getLogger("pg-boss");
 
 const common = { schema: "pgboss", migrate: false } as const;
 
@@ -61,7 +64,7 @@ export function webBoss(): Promise<PgBoss> {
       max: 2,
       application_name: "horeca-app-pgboss",
     });
-    boss.on("error", (err) => console.error("[pg-boss:web]", err.message));
+    boss.on("error", (err) => log.error({ err }, "pg-boss error"));
     await boss.start();
     return boss;
   })().catch((err: unknown) => {

@@ -15,7 +15,10 @@
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { env } from "@/env.core";
+import { getLogger } from "@/server/logger";
 import * as schema from "./schema";
+
+const log = getLogger("db");
 
 export type Db = NodePgDatabase<typeof schema>;
 /** The transaction handle every domain function receives as its first argument. */
@@ -36,7 +39,7 @@ function open(url: string, applicationName: string): Handle {
   });
   // An idle client losing its connection (e.g. Postgres restart) must not crash the process.
   pool.on("error", (err) => {
-    console.error(`[db:${applicationName}] idle client error`, err.message);
+    log.error({ err, pool: applicationName }, "idle client error");
   });
   return { pool, db: drizzle(pool, { schema }) };
 }

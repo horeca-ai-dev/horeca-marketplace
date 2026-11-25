@@ -146,7 +146,7 @@ Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the folder
 | `SUPPLIER_API_KEY` | API key our app sends to the supplier stock API |
 | `AI_ENABLED` | `false` by default; `true` only for testing and the demo (stretch S3/S4) |
 | `APP_ENV` | `local` / `staging` / `production` — staging banner (runtime, never `NEXT_PUBLIC_*`) |
-| `LOG_LEVEL` | pino log level |
+| `LOG_LEVEL` | pino log level (`fatal` … `trace`). Logs are JSON lines on stdout in every environment — in `src/server/logger.ts` use `getLogger("component")` and log errors as `{ err }` (secrets are redacted, query parameter values never appear). Readable locally: `… \| pnpm dlx pino-pretty` |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | AI features (stretch), server-side only |
 
 ### Demo accounts (seed data — local and staging; on production the password comes from `SEED_DEMO_PASSWORD`)

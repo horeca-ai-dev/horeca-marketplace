@@ -13,12 +13,20 @@ import { closeDb } from "@/server/db/client";
 import { closeEmail } from "@/server/email/send";
 import { createWorkerBoss } from "@/server/jobs/boss";
 import { queues, type Payload, type QueueName } from "@/server/jobs/queues";
+import { getLogger } from "@/server/logger";
+
+const log = getLogger("worker");
 
 // Refuse to start with a missing or malformed variable (lists every problem at once).
-assertEnv("worker");
+try {
+  assertEnv("worker");
+} catch (err: unknown) {
+  log.fatal({ err }, "invalid environment");
+  process.exit(1);
+}
 
 const boss = createWorkerBoss();
-boss.on("error", (err) => console.error("[worker] pg-boss:", err.message));
+boss.on("error", (err) => log.error({ err }, "pg-boss error"));
 
 /**
  * Registers one processor. A payload that fails its schema throws → the job fails; pg-boss retries
@@ -43,19 +51,20 @@ async function main() {
   await handle("email.send", async (data, job) => {
     // sendEmail() (src/server/email/send.ts) is ready; the templates that turn (template, id) into
     // recipient + subject + body arrive with D6-B3 (React Email). Until then the job is only logged.
-    console.log(
-      `[worker] email.send ${data.template} for ${data.id} (job ${job.id}) — not sent yet`,
+    log.info(
+      { template: data.template, id: data.id, jobId: job.id },
+      "email.send — not sent yet",
     );
   });
 
-  console.log("[worker] started");
+  log.info("started");
 }
 
 let stopping = false;
 async function shutdown(signal: string) {
   if (stopping) return;
   stopping = true;
-  console.log(`[worker] ${signal}: finishing active jobs…`);
+  log.info({ signal }, "finishing active jobs");
   await boss.stop({ graceful: true, timeout: 30_000 });
   await closeDb();
   closeEmail();
@@ -65,6 +74,6 @@ process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));
 
 main().catch((err: unknown) => {
-  console.error("[worker] failed to start:", err);
+  log.fatal({ err }, "failed to start");
   process.exit(1);
 });
