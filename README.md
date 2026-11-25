@@ -290,7 +290,7 @@ flowchart LR
 | `deploy/compose.yml` + `deploy/postgres/init/` | `/opt/horeca/deploy/` | one Compose file for both environments; project `horeca-<APP_ENV>` (`horeca-staging` / `horeca-production`); values from `/opt/horeca/<env>/.env` |
 | `deploy/env.staging.example` | template for `/opt/horeca/staging/.env` (deploy, 600) | every key; hosts are the Compose service names |
 | `deploy/nginx/horeca-upgrade-map.conf.example` | `/etc/nginx/conf.d/horeca-upgrade-map.conf` | WebSocket `map` for `/_mail/`, shared by both sites |
-| `deploy/nginx/horeca-staging.conf.example` | `/etc/nginx/sites-available/horeca-staging` | `listen 8081` (shared with production, told apart by `server_name`) → `127.0.0.1:3101`, basic auth, real IP from the friend's proxy, `/_mail/` → Mailpit |
+| `deploy/nginx/horeca-staging.conf.example` | `/etc/nginx/sites-available/horeca-staging` | `listen 8081` (shared with production, told apart by `server_name`) → `127.0.0.1:3101`, basic auth, plus the **only** `default_server` on 8081 (unknown Host → 444; the production site must not add a second one), real IP from the friend's proxy, `/_mail/` → Mailpit |
 | `deploy/backup.sh` + `deploy/cron.example` | `/opt/horeca/bin/backup.sh`, `/etc/cron.d/horeca-backup` | nightly `pg_dump` + media archive → `/var/backups/horeca/<env>/nightly/`, keep 7 (production cron line enabled with D5-A1) |
 | `scripts/smoke-g0.sh` | — | G0 smoke test (bash + curl): health, sign-up, sign-in, `/g0-check`, its Server Action (same Origin → `UNAUTHENTICATED` envelope; foreign Origin → refused), wrong password → 401; prints the manual two-network rate-limit check |
 
