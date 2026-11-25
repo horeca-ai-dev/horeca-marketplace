@@ -95,14 +95,14 @@ Source: [`docs/decisions/012-purchase-modes-payments-stock.md`](../decisions/012
 
 ### D4-B1 · order-core migration (from `schema/orders.ts`, `schema/finance.ts`)
 - **`sub_orders.mode`**: new enum `purchase_mode` = `direct | platform`, `NOT NULL`. `direct` only when the buyer–supplier agreement is `active` **when the checkout transaction runs** (revalidated inside it).
-- **`sub_orders.supplier_submission`**: new enum `pending | accepted | rejected | failed`. **Open:** it is written by the worker after commit / after payment, so `horeca_worker` needs `GRANT UPDATE (supplier_submission)` on `sub_orders` and an UPDATE policy; 012 does not list them.
+- **`sub_orders.supplier_submission`**: new enum `pending | accepted | rejected | failed`, written by the worker after commit / after payment. **Decided (012 §4, amended):** `GRANT SELECT, UPDATE (supplier_submission) ON sub_orders TO horeca_worker` + policy `sub_orders_worker_update FOR UPDATE TO horeca_worker USING (true) WITH CHECK (true)`. RLS cannot restrict columns — the **column grant** is what limits the worker to `supplier_submission`; RLS test: the worker cannot update `status` or any money column. Lands with the D4-B2 policy migration.
 - **`orders.payment_method` removed** (enum `payment_method` dropped; mode is per sub-order). The S6 seam note on it in `orders.ts` no longer applies.
 - **`order_payment_status`** enum gains **`not_applicable`** (orders with no platform sub-order). `sub_orders.order_payment_status` (the supplier's copy) uses the same enum.
 - **Keep `order_payments` and `app.recompute_order()`** with their tests. One change in `recompute_order` (lines 374–401): `v_due` sums only **`mode = 'platform'`** non-cancelled sub-orders; if the order has **no** platform sub-order, `v_pay := 'not_applicable'`.
 - **Ledger** (`ledger_entry_type` + policies, lines 312–336):
   - New entry type **`commission_payment`**; `ledger_entries_sign` check: `commission_payment > 0`.
   - `ledger_insert_checkout` (line 316): additionally **refuses `sale` for a direct sub-order** (`NOT (type = 'sale' AND s.mode = 'direct')`). Direct checkout books only `commission` = −commission.
-  - `ledger_insert_reversal` (line 325): **open** — 012 says direct cancellation books only `commission_reversal`; add the matching refusal of `sale_reversal` for direct so "cancelled sub-order sums to 0" holds.
+  - `ledger_insert_reversal` (line 325): **decided (012 §4, amended)** — refuses `sale_reversal` for a direct sub-order (`NOT (type = 'sale_reversal' AND s.mode = 'direct')`), so a cancelled direct sub-order books only `commission_reversal` and sums to 0. RLS test: `sale_reversal` for a direct sub-order is denied.
   - `ledger_insert_platform` (line 335): `type IN ('payout', 'adjustment', 'commission_payment')`.
   - Invariants (tests): platform `payable + commission = gross`; direct sub-order entries sum to **−commission**; cancelled sub-orders sum to 0; a supplier balance **may be negative** (no check constraint against it).
 - **Pro-forma** (`proforma_invoices`): created once at checkout **only if the order has a platform part**; its totals = the **platform sub-orders**, not the order totals; never changed afterwards. "Paid" is shown on the order page, not in the PDF.
@@ -115,7 +115,7 @@ Source: [`docs/decisions/012-purchase-modes-payments-stock.md`](../decisions/012
 - Optional second layer (012 §4): `sub_orders_insert` (line 261) requires an `active` agreement for `mode = 'direct'` — needs `supplier_agreements`, so it lands with D5-B0.
 - Optional second layer (012 §4, M2): `sub_orders_update_supplier` (line 265) refuses `status = 'shipped'` unless `mode = 'direct'` or `order_payment_status = 'paid'`.
 - Tests about **pending suppliers and re-apply** in `rls_tests.sql` are replaced by: "public registration cannot insert a supplier profile", "the platform inserts a supplier profile as `approved`", "the platform cannot insert one as `pending`".
-- `order_payments_worker_insert` (line 475, today in the stretch block): **open** — 012 has the worker insert a **`refund`** row too, but the draft policy allows only `type = 'receipt'`. Widen to `type IN ('receipt', 'refund')` when the policy moves into the MVP (D5-B0).
+- `order_payments_worker_insert` (line 475, today in the stretch block): **decided (012 §4, amended)** — `WITH CHECK (type IN ('receipt', 'refund') AND payment_id IS NOT NULL AND recorded_by_user_id IS NULL)`; moves into the MVP with D5-B0. RLS tests: the worker can insert a refund with a `payment_id`, not one without.
 
 ### D5-B0 · second migration — ERD freeze D5 evening
 - **`supplier_agreements`** (012 §3): `id`, `buyer_org_id`, `supplier_org_id`, `status` (`requested` → `active` | `rejected`; `active` → `ended`), `payment_term_days` (optional), `buyer_note`, `supplier_note`, `requested_by_user_id`, `decided_by_user_id`, `requested_at`, `decided_at`, `ended_at`. No `kind` column.
@@ -144,6 +144,7 @@ Source: [`docs/decisions/012-purchase-modes-payments-stock.md`](../decisions/012
 
 ### D11-B2 / D12-B1 · payments and cancellation
 - Callback route handler (web): verify HMAC-SHA256 on the raw body (constant time, timestamp tolerance) → enqueue **one job** → 200; non-2xx if our `payments` row does not exist yet.
+- Gateway API (`mock-services`, task D10-B3): `POST /payments`, `GET /payments/{id}`, signed callback with retry, admin "replay last callback" (basic auth), test cards success / declined. Our app reaches it via `PAYMENT_GATEWAY_URL` / `PAYMENT_GATEWAY_API_KEY`; the stock API via `SUPPLIER_API_URL` / `SUPPLIER_API_KEY`.
 - Worker (system login) processes the event: insert `payment_events` (duplicate → no-op), check amount + currency, update `payments`, insert the `order_payments` `receipt` / `refund`, call `app.recompute_order()`, submit platform sub-orders, enqueue e-mails.
 - **Expiry:** an unpaid platform part expires after 30 min; the job first asks the gateway (`GET /payments/{id}`), then cancels via `app.system_cancel_sub_order`.
 - **Buyer cancellation** of a platform sub-order is refused while a payment is `pending` (domain check; 409).
