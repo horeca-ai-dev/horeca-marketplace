@@ -169,11 +169,12 @@ Whatever is not finished at G4 goes into README → Known limitations. If someth
 ### D10 · Wed 02.12 — Order views, contracts, gateway page · **G2**
 - [ ] **D10-B1** (B · 3h) Buyer order queries + supplier sub-order queries (own only); authorization tests.
 - [ ] **D10-B2** (B · 1.5h) E2E happy path (Playwright) in the full suite — **direct order under an active contract**, stock badges visible.
+- [ ] **D10-B3** (B · 3h) **Gateway API** in `mock-services` (decision 012 §6): `POST /payments`, `GET /payments/{id}`, **signed callback** (HMAC-SHA256 over the raw body, timestamp) **with retry**, admin **"replay last callback"** (basic auth), test cards **success** / **declined**. Needed by D11-B2; the hosted page is D10-A3.
 - [ ] **D10-A1** (A · 3.5h) Buyer "My orders" list / detail (mode + payment status per sub-order); supplier sub-orders list / detail (mode, "order paid?").
 - [ ] **D10-A2** (A · 2.5h) **Contract UI, part 2:** buyer "My contracts" (status, end); supplier contract list.
 - [ ] **D10-A3** (A · 3h) **Gateway hosted page** in `mock-services` (fixed banner "TEST — do not enter a real card"; test cards **success** / **declined** only; numbers never logged or stored) + our **return / status page**.
 - [ ] **D10-AB1** (A+B · 1h) **G2** run-through on staging; fix blockers.
-- *A ≈ 10h, B ≈ 5.5h — **over 8.5h for A**.*
+- *A ≈ 10h, B ≈ 8.5h — **over 8.5h for A**.*
 
 ### D11 · Thu 03.12 — Commission, ledger, card payments
 - [ ] **D11-B1** (B · 3h) *(012 est.)* Supplier balance (Σ entries, may be negative) + commission per supplier; record payout / adjustment **+ `commission_payment` (direct mode)** (platform, audited).
