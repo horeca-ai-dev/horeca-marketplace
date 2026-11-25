@@ -3,6 +3,7 @@
  *
  *   src/worker.ts  → dist/worker.mjs   (node dist/worker.mjs)
  *   src/migrate.ts → dist/migrate.mjs  (node dist/migrate.mjs)
+ *   src/seed.ts    → dist/seed.mjs     (node dist/seed.mjs — one-shot demo data; production needs SEED_DEMO_PASSWORD)
  *
  * Only OUR code is bundled (the `@/…` imports resolve through tsconfig paths). Every npm package stays
  * external and is loaded at runtime from the image's production node_modules — pg-boss, sharp,
@@ -15,7 +16,11 @@
 import { build } from "esbuild";
 
 await build({
-  entryPoints: { worker: "src/worker.ts", migrate: "src/migrate.ts" },
+  entryPoints: {
+    worker: "src/worker.ts",
+    migrate: "src/migrate.ts",
+    seed: "src/seed.ts",
+  },
   outdir: "dist",
   outExtension: { ".js": ".mjs" },
   bundle: true,

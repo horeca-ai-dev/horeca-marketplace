@@ -29,10 +29,10 @@ docker compose -f docker-compose.dev.yml up -d   # Postgres (+ init script with 
 pnpm db:migrate          # apply migrations
 pnpm db:generate         # new migration from the Drizzle schema (add the new tables' grants by hand)
 pnpm auth:generate       # regenerate the Better Auth tables after changing its config
-pnpm db:seed             # demo data
+pnpm db:seed             # category tree + demo organizations and users (safe to repeat); production needs a real SEED_DEMO_PASSWORD
 pnpm dev                 # web app → http://localhost:3000
 pnpm worker:dev          # pg-boss worker (separate terminal)
-pnpm build:entries       # bundle worker + migrate into dist/ (the Docker image runs these)
+pnpm build:entries       # bundle worker + migrate + seed into dist/ (the Docker image runs these)
 docker build -t horeca:local .   # the one image: web (default), worker, migrate — see README → CI/CD
 pnpm lint && pnpm typecheck && pnpm test     # before every push
 pnpm format              # Prettier (format:check in CI)

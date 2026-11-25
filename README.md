@@ -150,6 +150,8 @@ Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the folder
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | AI features (stretch), server-side only |
 
 ### Demo accounts (seed data — local and staging; on production the password comes from `SEED_DEMO_PASSWORD`)
+`pnpm db:seed` (on a server: `node dist/seed.mjs` from the same image) creates the category tree and attribute definitions, then the accounts below. Users are created through Better Auth's server API (so it works with `REGISTRATION_OPEN=false`), organizations and profiles as `horeca_owner`. It only adds what is missing, so it is safe to run again and never resets a password. **On production it refuses** to run without `SEED_DEMO_PASSWORD`, or with the README password, or with fewer than 12 characters. All company names, tax IDs and IBANs are fictional. Supplier C has a 650 bps commission override (A and B use the platform default).
+
 | Account | E-mail | Password |
 |---|---|---|
 | Platform admin | `admin@demo.local` | `Demo-1234!` |
@@ -158,7 +160,7 @@ Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the folder
 | One company, two organizations (buyer + supplier) | `multi@demo.local` | `Demo-1234!` |
 
 ## Scripts
-`pnpm dev` · `pnpm worker:dev` · `pnpm build` · `pnpm build:entries` (bundles worker + migrate into `dist/`) · `pnpm start` · `pnpm lint` · `pnpm typecheck` (`next typegen` + `tsc --noEmit`) · `pnpm format` · `pnpm format:check` · `pnpm test` · `pnpm test:integration` · `pnpm test:e2e` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:reset` · `pnpm search:reindex`
+`pnpm dev` · `pnpm worker:dev` · `pnpm build` · `pnpm build:entries` (bundles worker, migrate and seed into `dist/`) · `pnpm start` · `pnpm lint` · `pnpm typecheck` (`next typegen` + `tsc --noEmit`) · `pnpm format` · `pnpm format:check` · `pnpm test` · `pnpm test:integration` · `pnpm test:e2e` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:reset` · `pnpm search:reindex`
 
 ## Project structure
 ```

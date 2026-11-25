@@ -52,6 +52,11 @@ const schema = {
   BETTER_AUTH_URL: url,
   BETTER_AUTH_SECRET: secret32,
   REGISTRATION_OPEN: flag,
+  /** Password of the seeded demo accounts. Optional: only production insists on it (see the seed). */
+  SEED_DEMO_PASSWORD: z
+    .string()
+    .min(8, "must be at least 8 characters")
+    .optional(),
 
   MEILI_HOST: url,
   MEILI_API_KEY: z.string().min(16, "must be at least 16 characters"),
@@ -113,6 +118,15 @@ const ROLE_KEYS = {
     "AI_ENABLED",
   ],
   migrate: ["DATABASE_MIGRATE_URL", "MIGRATIONS_DIR"],
+  // Reference rows as the owner; demo users through Better Auth, which needs the app login and its secrets.
+  seed: [
+    "APP_ENV",
+    "APP_URL",
+    "DATABASE_URL",
+    "DATABASE_MIGRATE_URL",
+    "BETTER_AUTH_URL",
+    "BETTER_AUTH_SECRET",
+  ],
 } as const satisfies Record<string, readonly Key[]>;
 
 export type EnvRole = keyof typeof ROLE_KEYS;
@@ -150,7 +164,7 @@ function read<K extends Key>(key: K): Value<K> {
 
 /**
  * Checks every key the entry point needs and throws ONE error listing all problems.
- * Called first thing by src/instrumentation.ts (web), src/worker.ts and src/migrate.ts.
+ * Called first thing by src/instrumentation.ts (web), src/worker.ts, src/migrate.ts and src/seed.ts.
  */
 export function assertEnv(role: EnvRole): void {
   if (raw("SKIP_ENV_VALIDATION") === "1") return;
@@ -216,6 +230,10 @@ export const env = {
   /** "true" = anyone may register. Seed users are created server-side regardless. */
   get REGISTRATION_OPEN() {
     return read("REGISTRATION_OPEN");
+  },
+  /** Password of the demo accounts; undefined when not set. Production refuses to seed without it. */
+  get SEED_DEMO_PASSWORD() {
+    return read("SEED_DEMO_PASSWORD");
   },
 
   /** Meilisearch base URL — server-side only. */
