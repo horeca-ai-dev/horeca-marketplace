@@ -23,7 +23,7 @@ The files in this folder are Member B's deliverable of 24.11.2026 and are **deli
 
 ### D2-B2 · identity migration + registration
 - **Grants come with the tables.** The migration that creates the Better Auth tables and `org_profiles`, `supplier_profiles`, `buyer_locations` also grants what `rls.sql` §3 gives `horeca_app` and `horeca_worker` on them. Without this, `horeca_app` gets "permission denied for table user" (reproduced) and register/login fail at G0. `ENABLE ROW LEVEL SECURITY` and the policies come on D4. The same applies to every later migration: **a new table ships with its grants**.
-- **⟶ 012 §8:** registration creates **buyer** organizations only; suppliers are created by the seed and by the admin (see §4 · D10-B4). The mechanics below are unchanged for buyers.
+- **⟶ 012 §8:** registration creates **buyer** organizations only; suppliers are created by the seed and by the admin (see §4 · D16-B0). The mechanics below are unchanged for buyers.
 - **Registration (`org.register`):** Better Auth's server API creates the user (and its credentials); then **one of our transactions** inserts the `organization` and `member` rows **directly** (Drizzle on the Better Auth tables, text IDs generated the same way Better Auth does — verify its ID format), sets the RLS context to the **new organization** (`app.org_id`, type, role `owner`), inserts `org_profiles` ~~(+ `supplier_profiles` for suppliers)~~ (buyers only — 012 §8), and finally sets the session's active organization through Better Auth's API. We do not use Better Auth's `organization/create` endpoint (it is disabled: `allowUserToCreateOrganization: false`). A user without an organization lands on "Complete company setup", which runs the same transaction.
 
 ### D2-B4 · pg-boss (replaces BullMQ / Redis / `afterCommit()`)
@@ -110,10 +110,11 @@ Source: [`docs/decisions/012-purchase-modes-payments-stock.md`](../decisions/012
 
 ### D4-B2 · `rls.sql` migration — identity policy / guard edits (in addition to the §2 edits)
 - `org_profiles_insert` (line 131): `WITH CHECK (organization_id = app.org_id() OR app.is_platform())`.
-- `supplier_profiles_insert` (line 163): `WITH CHECK ((organization_id = app.org_id() AND app.is_supplier()) OR app.is_platform())`. **Open:** with only the platform creating suppliers, the first branch may be dropped.
-- `app.org_profiles_guard()` (lines 137–156), INSERT branch: a **supplier** profile may be inserted **only by the platform and only as `approved`**; a buyer profile stays `approved` on insert. The `rejected → pending` re-apply exception in the UPDATE branch no longer has a flow — **open:** remove it or leave it unused.
+- `supplier_profiles_insert` (line 163): **decided (012 amendment)** — `WITH CHECK (app.is_platform())`. The supplier branch is dropped: suppliers can no longer insert their own profile (only the admin creates suppliers, and the seed runs as the owner). RLS test: a supplier member's insert into `supplier_profiles` is denied.
+- `app.org_profiles_guard()` (lines 137–156), INSERT branch: a **supplier** profile may be inserted **only by the platform and only as `approved`**; a buyer profile stays `approved` on insert. **Decided (012 amendment):** the `rejected → pending` re-apply exception in the UPDATE branch is **removed** — any status change by a non-platform caller raises. RLS test: a supplier cannot move its own profile from `rejected` to `pending`.
 - Optional second layer (012 §4): `sub_orders_insert` (line 261) requires an `active` agreement for `mode = 'direct'` — needs `supplier_agreements`, so it lands with D5-B0.
 - Optional second layer (012 §4, M2): `sub_orders_update_supplier` (line 265) refuses `status = 'shipped'` unless `mode = 'direct'` or `order_payment_status = 'paid'`.
+- Both decisions above are dead code after 012; **Member B confirms them with the RLS tests on D4** (D4-B2).
 - Tests about **pending suppliers and re-apply** in `rls_tests.sql` are replaced by: "public registration cannot insert a supplier profile", "the platform inserts a supplier profile as `approved`", "the platform cannot insert one as `pending`".
 - `order_payments_worker_insert` (line 475, today in the stretch block): **decided (012 §4, amended)** — `WITH CHECK (type IN ('receipt', 'refund') AND payment_id IS NOT NULL AND recorded_by_user_id IS NULL)`; moves into the MVP with D5-B0. RLS tests: the worker can insert a refund with a `payment_id`, not one without.
 
@@ -133,8 +134,8 @@ Source: [`docs/decisions/012-purchase-modes-payments-stock.md`](../decisions/012
 - **`app.system_cancel_sub_order(id, reason)`**: `SECURITY DEFINER`, `EXECUTE` granted **to `horeca_worker` only** (revoked from PUBLIC). Sets `cancelled` + reason, writes the `sub_order_events` row, books the reversals for the sub-order's mode, calls `app.recompute_order()`. Used by payment expiry and supplier-API rejection. RLS tests: `horeca_app` cannot execute it; reversals sum the sub-order to 0.
 - Stretch tables still later: `price_tiers`, `buyer_prices`, `rfq_*`.
 
-### D10-B4 (was D5-B1) · supplier onboarding by the admin (replaces approve / reject)
-- Until D10 the seed creates the demo suppliers directly as `approved` (D3-B1).
+### D16-B0 / D16-A0 (was D5-B1 / D5-A3) · supplier onboarding by the admin (replaces approve / reject) — MVP, finished before the G4 freeze
+- Until D16 the seed creates the demo suppliers directly as `approved` (D3-B1).
 - The admin creates organization + `org_profiles` (`approved`) + `supplier_profiles` + owner user through a Better Auth **server API that does not start a session** (test: the admin stays logged in as the admin). Organization / member rows are inserted the same way as in registration (§2 · D2-B2).
 - A set-password link with a longer lifetime goes to Mailpit **and is shown once to the admin**. Audit entry: supplier created.
 
