@@ -55,6 +55,9 @@ RUN pnpm build \
 # ── runtime ──────────────────────────────────────────────────────────────────────────────────────
 FROM ${NODE_IMAGE} AS runtime
 ARG PLAYWRIGHT_VERSION=1.65.0
+# "0" skips the Chromium download (local builds on a network that blocks storage.googleapis.com).
+# Such an image cannot render PDFs. CI and the release image always build with the default "1".
+ARG INSTALL_CHROMIUM=1
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     HOSTNAME=0.0.0.0 \
@@ -72,7 +75,11 @@ WORKDIR /app
 # the version check below keeps it in step with package.json.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends fonts-dejavu-core fonts-liberation \
- && npx -y "playwright@${PLAYWRIGHT_VERSION}" install --with-deps --only-shell chromium \
+ && if [ "${INSTALL_CHROMIUM}" = "1" ]; then \
+      npx -y "playwright@${PLAYWRIGHT_VERSION}" install --with-deps --only-shell chromium; \
+    else \
+      echo "INSTALL_CHROMIUM=${INSTALL_CHROMIUM}: skipping Chromium (this image cannot render PDFs)"; \
+    fi \
  && rm -rf /var/lib/apt/lists/* /root/.npm /tmp/*
 
 COPY --from=prod-deps /app/node_modules ./node_modules
