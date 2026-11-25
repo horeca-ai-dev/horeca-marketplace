@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:entries": "node scripts/build-entries.mjs",
     "start": "next start",
     "worker:dev": "tsx watch --env-file-if-exists=.env src/worker.ts",
     "lint": "eslint",

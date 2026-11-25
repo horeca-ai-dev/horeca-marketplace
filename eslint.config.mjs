@@ -111,6 +111,8 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    // Bundled worker / migrate entries (pnpm build:entries):
+    "dist/**",
     "next-env.d.ts",
     // Planning documents and drafts (not part of the app):
     "docs/**",

@@ -81,6 +81,9 @@ jobs:
       - name: Build (without any environment variables, like the Docker build)
         run: pnpm build
 
+      - name: Bundle the worker and migrate entries (as the Docker image does)
+        run: pnpm build:entries
+
   database:
     name: database
     runs-on: ubuntu-24.04
