@@ -9,8 +9,9 @@
  *   - read pgboss.version (start() checks the schema version) and pgboss.queue (queue cache)
  *   - INSERT into pgboss.job_common: every queue we create uses the shared job table
  *     (we never create queues with `partition: true`, which would give a queue its own table)
- *   - SELECT on (id, start_after) only: send() uses INSERT … RETURNING id, which needs read access to
- *     the returned columns. The app cannot read job payloads.
+ *   - SELECT on (id, start_after, state) only: send() uses INSERT … RETURNING id, which needs read
+ *     access to the returned columns; /api/health reads (state, start_after) to report a stuck worker
+ *     (D2-A4). The app cannot read job payloads.
  *
  * horeca_worker — fetch / complete / fail, plus maintenance (supervise) and cron (schedule):
  *   these touch almost every pg-boss table (job, queue, schedule, version, instance, bam, …), so the
@@ -23,7 +24,7 @@ GRANT USAGE ON SCHEMA pgboss TO horeca_app, horeca_worker;
 
 GRANT SELECT ON pgboss.version, pgboss.queue TO horeca_app;
 GRANT INSERT ON pgboss.job_common TO horeca_app;
-GRANT SELECT (id, start_after) ON pgboss.job_common TO horeca_app;
+GRANT SELECT (id, start_after, state) ON pgboss.job_common TO horeca_app;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA pgboss TO horeca_worker;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA pgboss TO horeca_worker;

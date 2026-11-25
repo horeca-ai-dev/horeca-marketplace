@@ -15,6 +15,13 @@
       "when": 1795565537541,
       "tag": "0001_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795641751552,
+      "tag": "0002_health_grants",
+      "breakpoints": true
     }
   ]
 }
