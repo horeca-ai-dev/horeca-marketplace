@@ -81,7 +81,7 @@ src/
 17. **Dependencies:** never add one without asking, saying why, and checking it is maintained. *`next-intl` is already decided by decision 012 (no need to ask again) — pin an exact version that is at least two weeks old when D3-A4 adds it.*
 
 ## Infrastructure rules
-- **Traffic path:** internet → friend's public proxy (TLS, certbot) → Tailscale → our Nginx (port `8081`, both environments split by `server_name`; the firewall allows only the Tailscale interface) → app on `127.0.0.1` (staging `3101`, production `3102` — `WEB_PORT`). Our Nginx trusts `X-Forwarded-For` only from the friend's Tailscale IP (`set_real_ip_from`) and passes `X-Forwarded-Proto: https` through unchanged — never overwrite it, or auth cookies break.
+- **Traffic path:** internet → friend's public proxy (TLS, certbot) → Tailscale → our Nginx (listens on the Tailscale address only, port `8081`; both environments split by `server_name`) → app on `127.0.0.1` (staging `3101`, production `3102` — `WEB_PORT`). Our Nginx trusts `X-Forwarded-For` only from the friend's Tailscale IP (`set_real_ip_from`) and passes `X-Forwarded-Proto: https` through unchanged — never overwrite it, or auth cookies break.
 - **Media volume:** product images and invoice PDFs live on a Docker volume mounted into web and worker; staging and production have separate volumes; the volume is part of the nightly backup. Media responses use `Cache-Control: private` (never cacheable by a proxy).
 - **Every Docker `ports:` entry starts with `127.0.0.1:`.** `"3000:3000"` binds to all interfaces and bypasses the host firewall (ufw). Postgres and Meilisearch get **no** `ports:` entry on the server.
 - **No Redis:** the job queue (pg-boss) lives in PostgreSQL; there is no application cache.
