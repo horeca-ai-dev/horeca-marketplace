@@ -101,7 +101,7 @@ Whatever is not finished at G4 goes into README → Known limitations. If someth
 - [ ] **D3-AB1** (A 1.5h · B 1.5h) Fill in the programme's **Software Specification template**: A — overview, requirements, architecture, workflow, deployment; B — data model, permission matrix, money rules (link to `docs/decisions-9-11/` instead of copying).
 - [x] **D3-AB2** (A+B · 1h) Mentor meeting: `MENTOR-QUESTIONS.md`; agree the weekly check-in day. *(Held 25.11 — outcome: decision 012.)*
 - [x] **D3-B2** (B · 2h) Catalogue migration from `schema/catalogue.ts` (with the decision-J change: 3 WebP sizes, no `thumb_key`; no trigram index) + grants for the catalogue tables + category & attribute seed from `seed-categories.md`.
-- [ ] **D3-B3** (B · 0.5h) pino logger in web and worker.
+- [x] **D3-B3** (B · 0.5h) pino logger in web and worker.
 - [ ] **D3-A4** (A · 1h) *(012 est.)* **i18n is MVP:** `next-intl` with **Montenegrin (Latin)** messages from the start — UI, validation and domain error messages, e-mails, invoice PDF, CSV reports; code, logs and docs stay English (decision 012 §10). No longer optional.
 - *A ≈ 8h, B ≈ 8h incl. the meeting; decide at 16:00 what moves.*
 
