@@ -1,6 +1,6 @@
 # 012 — Purchase modes, contracts, card payments, supplier stock, onboarding, language
 
-Date 25.11.2026 · Authors @BogdanD3 with Claude, reviewed by an independent review (Fable, decision-12 round) · **Status: accepted** · *Amended 25.11.2026: five gaps found while applying it to the docs are resolved in §4, §6, §7, §12, §13 (worker grant for `supplier_submission`, refund rows from the worker, no `sale_reversal` for direct, supplier-API env, gateway-API task).*
+Date 25.11.2026 · Authors @BogdanD3 with Claude, reviewed by an independent review (Fable, decision-12 round) · **Status: accepted** · *Amended 25.11.2026: gaps found while applying it to the docs are resolved in §4, §6, §7, §8, §12, §13 (worker grant for `supplier_submission`, refund rows from the worker, no `sale_reversal` for direct, supplier-API env, gateway-API task; `supplier_profiles_insert` platform-only and the guard's re-apply exception removed — dead after this decision, confirmed by the RLS tests on D4).*
 
 ## Context
 On 25.11 the mentors decided how purchasing works and answered our open questions. These decisions **replace** parts of the plan (they are the agreed way of doing the original features). The review reproduced four flows that would have failed under the current roles and policies; their fixes are part of this decision. **Where this file disagrees with `docs/decisions-9-11/` or with older text in README / CLAUDE / DESIGN / TASKS, this file wins.**
@@ -86,7 +86,7 @@ Created **once at checkout** for the **platform part** of the order (totals = th
 ## 8. `mock-services` and supplier onboarding
 - **One `mock-services` app** (gateway + supplier stock API) built as a **fourth entry point of the existing image**, its own container per environment, state in memory with a seed on start. Built by Member A; Member B integrates against it.
 - **Supplier onboarding by the admin:** organization + profile (`approved`) + owner user created through a Better Auth server API **that does not start a session** (test that the admin stays logged in as the admin); a set-password link with a longer lifetime is sent to Mailpit **and shown once to the admin**, who hands it to the supplier.
-- Policy / guard edits: `org_profiles_insert` and `supplier_profiles_insert` allow the platform; `app.org_profiles_guard()`: supplier profiles are inserted **by the platform only, as `approved`**. Public registration can no longer create a supplier. Tests about pending suppliers and re-apply are updated.
+- Policy / guard edits: `org_profiles_insert` allows the platform; `supplier_profiles_insert` allows **only** the platform (suppliers can no longer insert their own profile); `app.org_profiles_guard()`: supplier profiles are inserted **by the platform only, as `approved`**, and the `rejected → pending` re-apply exception is removed. Public registration can no longer create a supplier. Tests about pending suppliers and re-apply are updated.
 - Removed: supplier self-registration, approval queue, pending banner, approve / reject / re-apply flows. "Complete company setup" stays for buyers.
 
 ## 9. Scraped product data
@@ -140,7 +140,7 @@ Stretch tables still later: `price_tiers`, `buyer_prices`, `rfq_*`.
 | Stretch | S6 removed (now MVP); order **S3 → S4 → S1 → S5**, realistically **1–2** of them from D17; S2 / S7 only if time |
 | Demo script | Rewritten: direct order under a contract, card payment (success + declined), forged callback rejected, replayed callback ignored, supplier API down blocks one group only |
 
-*Rebalanced in `TASKS.md` on 25.11 (task IDs above are the original ones): D5-B1 → **D10-B4** (the seed creates suppliers until then) with its form D5-A3 → **D11-A3**; D8-B3 scraper → **D13-B4** (generated seed D8-B3 until then); image upload route D5-B3 → **D6-B0**; payment expiry out of D11-B2 → **D15-B0**; new **D14-B3** diagrams for 012.*
+*Rebalanced in `TASKS.md` on 25.11 (task IDs above are the original ones): D5-B1 → **D16-B0** with its form D5-A3 → **D16-A0** — **MVP, finished on D16 before the G4 freeze** (the seed creates suppliers until then); D8-B3 scraper → **D11-A3** + **D13-A3** (owner A, 4h time-box in total), generated seed → **D8-A3** (owner A); D10-A2 → **D12-A3**; admin category management out of D6-A1 → **D14-A3**; duplicate / forged callback tests out of D11-B3 → **D15-B1**; image upload route D5-B3 → **D6-B0**; payment expiry out of D11-B2 → **D15-B0**; new **D14-B3** diagrams for 012.*
 
 **Gates:** G1 = D4 order core + D5 second migration (ERD freeze D5). **G2** = happy path with a **direct** order under an active contract, stock badges visible. **G3** = the brief's Definition of Done + one **successful card payment** with its pro-forma; failure scenes on D15–D16.
 **Time:** net ≈ +55–70 h (independent review); covered by the stretch window, which now holds 1–2 stretch goals.
