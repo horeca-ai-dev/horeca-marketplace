@@ -1,0 +1,63 @@
+# Our Nginx site for STAGING (D3-A2; README → Server & infrastructure).
+# Install: copy to /etc/nginx/sites-available/horeca-staging, replace the two <PLACEHOLDERS>, link it
+# into sites-enabled, `nginx -t && systemctl reload nginx`. Needs horeca-upgrade-map.conf in conf.d.
+# The two Tailscale IPs are NEVER committed — they exist only in the installed copy on the server.
+#
+# Traffic: visitor → friend's public proxy (TLS) → Tailscale → THIS server block → 127.0.0.1:3001 (web)
+#                                                                              → 127.0.0.1:8026 (Mailpit UI)
+server {
+    # The server's own Tailscale address only — never 0.0.0.0, so nothing outside the tailnet reaches it.
+    listen <SERVER_TAILSCALE_IP>:80;
+    server_name staging.horeca.bogdandelic.online;
+
+    # Real client IP. X-Forwarded-For is trusted ONLY when the request comes from the friend's proxy,
+    # which sets it to the visitor's address. With real_ip_recursive off (default) Nginx takes the
+    # LAST address, i.e. the one that proxy wrote — a client cannot forge it by sending its own header.
+    # $remote_addr below is then the visitor's IP; Better Auth's rate limiter reads it from X-Real-IP.
+    set_real_ip_from <FRIEND_PROXY_TAILSCALE_IP>;
+    real_ip_header X-Forwarded-For;
+
+    # Whole site behind basic auth (staging is not public). File: htpasswd -c (see README).
+    auth_basic "HoReCa staging";
+    auth_basic_user_file /etc/nginx/htpasswd/horeca-staging;
+
+    client_max_body_size 20m;          # image (5 MB) and CSV uploads, with headroom
+    proxy_connect_timeout 10s;
+    proxy_send_timeout 120s;
+    proxy_read_timeout 120s;           # longer than the default 60 s (CSV import, PDF download)
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;   # Next.js compares it with Origin for Server Actions
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        # Passed through from the friend's proxy ("https"). NEVER set it to $scheme here: that is
+        # "http" on this hop, and Better Auth would then refuse / mis-set its secure cookies.
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        # The basic-auth credentials stop here; the app never sees them (and never logs them).
+        proxy_set_header Authorization "";
+    }
+
+    # Mailpit UI (MP_WEBROOT=/_mail/ in compose.yml, so the path is passed through unchanged).
+    location = /_mail {
+        return 301 /_mail/;
+    }
+    location /_mail/ {
+        proxy_pass http://127.0.0.1:8026;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Upgrade $http_upgrade;               # live message list (WebSocket)
+        proxy_set_header Connection $horeca_connection_upgrade;
+        proxy_set_header Authorization "";
+        proxy_read_timeout 1h;                                 # keep the WebSocket open
+    }
+
+    # TODO(D6-A3): mock-services — card gateway's hosted page and API (decision 012 §6, §8).
+    # location /gateway/ {
+    #     proxy_pass http://127.0.0.1:<MOCK_SERVICES_STAGING_PORT>;
+    #     ... same headers as location / ...
+    # }
+}

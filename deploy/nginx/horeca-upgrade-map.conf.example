@@ -1,0 +1,9 @@
+# Install ONCE as /etc/nginx/conf.d/horeca-upgrade-map.conf (Debian includes conf.d/*.conf inside http {}).
+# Shared by the staging and production sites: a `map` defines a variable for the whole http block, so
+# putting it in each site file would define it twice and Nginx would refuse to start.
+#
+# WebSocket upgrade for the Mailpit UI at /_mail/: "upgrade" when the client asks for it, else "close".
+map $http_upgrade $horeca_connection_upgrade {
+    default upgrade;
+    ''      close;
+}
