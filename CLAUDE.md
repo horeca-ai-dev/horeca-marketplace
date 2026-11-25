@@ -39,6 +39,7 @@ pnpm format              # Prettier (format:check in CI)
 pnpm test:integration    # Testcontainers: needs Docker running; starts its own Postgres (your dev database is not touched); Mailpit from Compose
 pnpm test:e2e            # Playwright
 pnpm search:reindex      # rebuild Meilisearch from Postgres
+SMOKE_BASE_URL=… SMOKE_BASIC_AUTH_USER=… SMOKE_BASIC_AUTH_PASS=… scripts/smoke-g0.sh   # G0 smoke test (CI runs it after each staging deploy)
 ```
 Keep this section accurate — update it in the same PR that changes a command.
 
