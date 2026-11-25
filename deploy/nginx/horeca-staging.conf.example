@@ -1,30 +1,31 @@
 # Our Nginx site for STAGING (D3-A2; README → Server & infrastructure).
-# Install: copy to /etc/nginx/sites-available/horeca-staging, replace <FRIEND_PROXY_TAILSCALE_IP>, link it
+# Install: copy to /etc/nginx/sites-available/horeca-staging, replace the <PLACEHOLDERS>, link it
 # into sites-enabled, `nginx -t && systemctl reload nginx`. Needs horeca-upgrade-map.conf in conf.d.
 # Tailscale IPs are NEVER committed — they exist only in the installed copy on the server.
 #
 # Traffic: visitor → friend's public proxy (TLS) → Tailscale → <SERVER_TAILSCALE_IP>:8081 → THIS server
 #          block → 127.0.0.1:3101 (web, WEB_PORT) / 127.0.0.1:8126 (Mailpit UI, MAILPIT_UI_PORT)
-# Staging and production share port 8081 and are told apart by server_name. Production (D5-A1):
+# Staging and production share <SERVER_TAILSCALE_IP>:8081 and are told apart by server_name. Production (D5-A1):
 # horeca.bogdandelic.online → 127.0.0.1:3102 / 127.0.0.1:8127.
 
-# Catch-all for port 8081: a request whose Host matches neither our staging nor our production
+# Catch-all for <SERVER_TAILSCALE_IP>:8081: a request whose Host matches neither our staging nor our production
 # server_name (an IP, a scanner, a wrong domain) gets 444 — Nginx closes the connection without an
 # answer. Without it, Nginx would hand such requests to whichever 8081 site it loaded first.
-# ⚠️ Only ONE server may be `default_server` per port, and it lives HERE. The production site
-# (D5-A1) uses a plain `listen 8081;` — a second default_server makes `nginx -t` fail with
-# "a duplicate default server for 0.0.0.0:8081".
+# ⚠️ Only ONE server may be `default_server` per address:port, and it lives HERE. The production site
+# (D5-A1) uses a plain `listen <SERVER_TAILSCALE_IP>:8081;` (same address) — a second default_server
+# makes `nginx -t` fail with "a duplicate default server for <SERVER_TAILSCALE_IP>:8081".
+# The Tailscale address on every 8081 listen: only our sites use 8081, so no other site is affected.
 server {
-    listen 8081 default_server;
+    listen <SERVER_TAILSCALE_IP>:8081 default_server;
     server_name _;
     return 444;
 }
 
 server {
-    # All interfaces (so Nginx starts even before tailscaled is up). What keeps 8081 private is the host
-    # firewall: it allows only the Tailscale interface (Nginx is a host process, so ufw applies to it —
-    # unlike Docker's published ports).
-    listen 8081;
+    # The server's Tailscale address ONLY — the server has no active firewall, so listening on all
+    # interfaces would expose 8081 publicly. Nginx can bind this address before tailscaled is up at
+    # boot thanks to net.ipv4.ip_nonlocal_bind=1 (README → One-time server setup).
+    listen <SERVER_TAILSCALE_IP>:8081;
     server_name staging.horeca.bogdandelic.online;
 
     # Real client IP. X-Forwarded-For is trusted ONLY when the request comes from the friend's proxy,
