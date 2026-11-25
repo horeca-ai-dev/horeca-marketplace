@@ -23,7 +23,7 @@ The files in this folder are Member B's deliverable of 24.11.2026 and are **deli
 
 ### D2-B2 · identity migration + registration
 - **Grants come with the tables.** The migration that creates the Better Auth tables and `org_profiles`, `supplier_profiles`, `buyer_locations` also grants what `rls.sql` §3 gives `horeca_app` and `horeca_worker` on them. Without this, `horeca_app` gets "permission denied for table user" (reproduced) and register/login fail at G0. `ENABLE ROW LEVEL SECURITY` and the policies come on D4. The same applies to every later migration: **a new table ships with its grants**.
-- **⟶ 012 §8:** registration creates **buyer** organizations only; suppliers are created by the admin (see §4 · D5-B1). The mechanics below are unchanged for buyers.
+- **⟶ 012 §8:** registration creates **buyer** organizations only; suppliers are created by the seed and by the admin (see §4 · D10-B4). The mechanics below are unchanged for buyers.
 - **Registration (`org.register`):** Better Auth's server API creates the user (and its credentials); then **one of our transactions** inserts the `organization` and `member` rows **directly** (Drizzle on the Better Auth tables, text IDs generated the same way Better Auth does — verify its ID format), sets the RLS context to the **new organization** (`app.org_id`, type, role `owner`), inserts `org_profiles` ~~(+ `supplier_profiles` for suppliers)~~ (buyers only — 012 §8), and finally sets the session's active organization through Better Auth's API. We do not use Better Auth's `organization/create` endpoint (it is disabled: `allowUserToCreateOrganization: false`). A user without an organization lands on "Complete company setup", which runs the same transaction.
 
 ### D2-B4 · pg-boss (replaces BullMQ / Redis / `afterCommit()`)
@@ -133,7 +133,8 @@ Source: [`docs/decisions/012-purchase-modes-payments-stock.md`](../decisions/012
 - **`app.system_cancel_sub_order(id, reason)`**: `SECURITY DEFINER`, `EXECUTE` granted **to `horeca_worker` only** (revoked from PUBLIC). Sets `cancelled` + reason, writes the `sub_order_events` row, books the reversals for the sub-order's mode, calls `app.recompute_order()`. Used by payment expiry and supplier-API rejection. RLS tests: `horeca_app` cannot execute it; reversals sum the sub-order to 0.
 - Stretch tables still later: `price_tiers`, `buyer_prices`, `rfq_*`.
 
-### D5-B1 · supplier onboarding by the admin (replaces approve / reject)
+### D10-B4 (was D5-B1) · supplier onboarding by the admin (replaces approve / reject)
+- Until D10 the seed creates the demo suppliers directly as `approved` (D3-B1).
 - The admin creates organization + `org_profiles` (`approved`) + `supplier_profiles` + owner user through a Better Auth **server API that does not start a session** (test: the admin stays logged in as the admin). Organization / member rows are inserted the same way as in registration (§2 · D2-B2).
 - A set-password link with a longer lifetime goes to Mailpit **and is shown once to the admin**. Audit entry: supplier created.
 
@@ -142,11 +143,11 @@ Source: [`docs/decisions/012-purchase-modes-payments-stock.md`](../decisions/012
 - Inside the transaction only our own data is revalidated (incl. the agreement for `direct`). Locking unchanged: `cart_items … FOR UPDATE` only.
 - Ledger per mode as in D4-B1. Pro-forma only for the platform part. Direct sub-orders are submitted to the supplier API **after commit** (job); platform sub-orders after `payment.succeeded`.
 
-### D11-B2 / D12-B1 · payments and cancellation
+### D11-B2 / D12-B1 / D15-B0 · payments and cancellation
 - Callback route handler (web): verify HMAC-SHA256 on the raw body (constant time, timestamp tolerance) → enqueue **one job** → 200; non-2xx if our `payments` row does not exist yet.
 - Gateway API (`mock-services`, task D10-B3): `POST /payments`, `GET /payments/{id}`, signed callback with retry, admin "replay last callback" (basic auth), test cards success / declined. Our app reaches it via `PAYMENT_GATEWAY_URL` / `PAYMENT_GATEWAY_API_KEY`; the stock API via `SUPPLIER_API_URL` / `SUPPLIER_API_KEY`.
 - Worker (system login) processes the event: insert `payment_events` (duplicate → no-op), check amount + currency, update `payments`, insert the `order_payments` `receipt` / `refund`, call `app.recompute_order()`, submit platform sub-orders, enqueue e-mails.
-- **Expiry:** an unpaid platform part expires after 30 min; the job first asks the gateway (`GET /payments/{id}`), then cancels via `app.system_cancel_sub_order`.
+- **Expiry (D15-B0):** an unpaid platform part expires after 30 min; the job first asks the gateway (`GET /payments/{id}`), then cancels via `app.system_cancel_sub_order`.
 - **Buyer cancellation** of a platform sub-order is refused while a payment is `pending` (domain check; 409).
 - **Refunds** only by cancelling a **paid** platform sub-order before shipping, for that sub-order's gross. Reversals are booked at cancellation; the refund callback only records the `refund` row and `refunded_cents`. No admin refund action.
 - `subOrder.ship` requires `paid` for platform sub-orders (M2); confirming before payment is allowed.

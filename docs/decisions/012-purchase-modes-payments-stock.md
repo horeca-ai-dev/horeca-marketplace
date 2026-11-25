@@ -140,6 +140,8 @@ Stretch tables still later: `price_tiers`, `buyer_prices`, `rfq_*`.
 | Stretch | S6 removed (now MVP); order **S3 → S4 → S1 → S5**, realistically **1–2** of them from D17; S2 / S7 only if time |
 | Demo script | Rewritten: direct order under a contract, card payment (success + declined), forged callback rejected, replayed callback ignored, supplier API down blocks one group only |
 
+*Rebalanced in `TASKS.md` on 25.11 (task IDs above are the original ones): D5-B1 → **D10-B4** (the seed creates suppliers until then) with its form D5-A3 → **D11-A3**; D8-B3 scraper → **D13-B4** (generated seed D8-B3 until then); image upload route D5-B3 → **D6-B0**; payment expiry out of D11-B2 → **D15-B0**; new **D14-B3** diagrams for 012.*
+
 **Gates:** G1 = D4 order core + D5 second migration (ERD freeze D5). **G2** = happy path with a **direct** order under an active contract, stock badges visible. **G3** = the brief's Definition of Done + one **successful card payment** with its pro-forma; failure scenes on D15–D16.
 **Time:** net ≈ +55–70 h (independent review); covered by the stretch window, which now holds 1–2 stretch goals.
 
