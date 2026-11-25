@@ -13,7 +13,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
-import { env } from "@/env";
+import { env } from "@/env.core";
 import { createOwnerBoss } from "@/server/jobs/boss";
 import { pgbossGrantsSql } from "@/server/jobs/pgboss-grants";
 import { QUEUE_NAMES } from "@/server/jobs/queues";

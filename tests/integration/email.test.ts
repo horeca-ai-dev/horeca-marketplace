@@ -3,7 +3,7 @@
  * (Mailpit: SMTP on 1025, web UI and API on 8025). Open http://127.0.0.1:8025 to see the e-mail.
  */
 import { afterAll, describe, expect, it } from "vitest";
-import { env } from "@/env";
+import { env } from "@/env.core";
 import { closeEmail, sendEmail } from "@/server/email/send";
 
 // Mailpit's HTTP API runs on the same host as its SMTP server, port 8025.

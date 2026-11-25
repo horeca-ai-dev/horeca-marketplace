@@ -12,7 +12,7 @@
  * the next login lands on "Complete company setup", which runs the same transaction.
  */
 import { APIError } from "better-auth/api";
-import { env } from "@/env";
+import { env } from "@/env.core";
 import type {
   CompanyInput,
   RegistrationInput,

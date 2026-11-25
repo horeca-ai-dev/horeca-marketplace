@@ -8,10 +8,14 @@
  * state, be idempotent (pg-boss may deliver a job twice after a crash).
  */
 import type { Job } from "pg-boss";
+import { assertEnv } from "@/env.core";
 import { closeDb } from "@/server/db/client";
 import { closeEmail } from "@/server/email/send";
 import { createWorkerBoss } from "@/server/jobs/boss";
 import { queues, type Payload, type QueueName } from "@/server/jobs/queues";
+
+// Refuse to start with a missing or malformed variable (lists every problem at once).
+assertEnv("worker");
 
 const boss = createWorkerBoss();
 boss.on("error", (err) => console.error("[worker] pg-boss:", err.message));

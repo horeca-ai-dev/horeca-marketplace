@@ -14,7 +14,7 @@
  *                             daily partitions (CREATE TABLE), which again only the owner may do
  */
 import { PgBoss } from "pg-boss";
-import { env } from "@/env";
+import { env } from "@/env.core";
 
 const common = { schema: "pgboss", migrate: false } as const;
 

@@ -7,7 +7,7 @@
  * Only db:studio needs a database URL; it connects as the OWNER.
  */
 import { defineConfig } from "drizzle-kit";
-import { env } from "./src/env";
+import { env } from "./src/env.core";
 
 // Node can read .env itself (no dotenv dependency). No .env (CI) is fine.
 try {

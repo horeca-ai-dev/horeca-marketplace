@@ -42,11 +42,31 @@ const eslintConfig = defineConfig([
       "no-restricted-syntax": ["error", ...nextPublicBans],
     },
   },
-  // …except src/env.ts, the single place that reads process.env (NEXT_PUBLIC_ stays banned there too).
+  // …except src/env.core.ts, the single place that reads process.env (NEXT_PUBLIC_ stays banned there too).
   {
-    files: ["src/env.ts"],
+    files: ["src/env.core.ts"],
     rules: {
       "no-restricted-properties": "off",
+    },
+  },
+
+  // Next.js-only code reads configuration through src/env.ts (`server-only`), never env.core directly,
+  // so a Client Component that imports configuration fails the build.
+  {
+    files: ["src/app/**", "src/components/**", "src/instrumentation.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/env.core", "**/env.core"],
+              message:
+                "Import configuration from @/env (server-only) in Next.js code.",
+            },
+          ],
+        },
+      ],
     },
   },
 
