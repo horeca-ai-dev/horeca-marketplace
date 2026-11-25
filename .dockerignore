@@ -1,0 +1,4 @@
+# Scraped seed data (decision 012 §9) — never baked into an image
+.seed-private/
+
+# The rest of the build-context exclusions come with the Dockerfile (TASKS D2-A4).
