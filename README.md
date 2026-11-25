@@ -142,6 +142,8 @@ Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the folder
 | `PAYMENT_GATEWAY_URL` | Base URL of the mock gateway (`mock-services`) as seen from web and worker |
 | `PAYMENT_GATEWAY_API_KEY` | API key our app sends to the gateway |
 | `PAYMENT_WEBHOOK_SECRET` | HMAC-SHA256 secret for verifying payment callbacks (shared with `mock-services`; different per environment) |
+| `SUPPLIER_API_URL` | Base URL of the supplier stock API (`mock-services`; the supplier ID is in the path) as seen from web and worker |
+| `SUPPLIER_API_KEY` | API key our app sends to the supplier stock API |
 | `AI_ENABLED` | `false` by default; `true` only for testing and the demo (stretch S3/S4) |
 | `APP_ENV` | `local` / `staging` / `production` — staging banner (runtime, never `NEXT_PUBLIC_*`) |
 | `LOG_LEVEL` | pino log level |
