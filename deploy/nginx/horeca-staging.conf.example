@@ -7,6 +7,19 @@
 #          block → 127.0.0.1:3101 (web, WEB_PORT) / 127.0.0.1:8126 (Mailpit UI, MAILPIT_UI_PORT)
 # Staging and production share port 8081 and are told apart by server_name. Production (D5-A1):
 # horeca.bogdandelic.online → 127.0.0.1:3102 / 127.0.0.1:8127.
+
+# Catch-all for port 8081: a request whose Host matches neither our staging nor our production
+# server_name (an IP, a scanner, a wrong domain) gets 444 — Nginx closes the connection without an
+# answer. Without it, Nginx would hand such requests to whichever 8081 site it loaded first.
+# ⚠️ Only ONE server may be `default_server` per port, and it lives HERE. The production site
+# (D5-A1) uses a plain `listen 8081;` — a second default_server makes `nginx -t` fail with
+# "a duplicate default server for 0.0.0.0:8081".
+server {
+    listen 8081 default_server;
+    server_name _;
+    return 444;
+}
+
 server {
     # All interfaces (so Nginx starts even before tailscaled is up). What keeps 8081 private is the host
     # firewall: it allows only the Tailscale interface (Nginx is a host process, so ufw applies to it —
