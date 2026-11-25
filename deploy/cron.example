@@ -1,0 +1,10 @@
+# Install as /etc/cron.d/horeca-backup (owner root, mode 644). Times are server local time.
+# The sixth field is the user: backups run as `deploy` (docker group, owns /var/backups/horeca).
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Production nightly backup — uncomment with D5-A1, once horeca-production is running.
+# 15 3 * * * deploy /opt/horeca/bin/backup.sh production >>/var/backups/horeca/backup.log 2>&1
+
+# Staging is not backed up (policy). Test the script once by hand instead:
+#   sudo -u deploy /opt/horeca/bin/backup.sh staging
