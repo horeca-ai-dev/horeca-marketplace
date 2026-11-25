@@ -1,0 +1,173 @@
+# Server Compose file (D3-A2) — ONE file for every environment; the values come from
+# /opt/horeca/<env>/.env (template: deploy/env.staging.example). Never edited per environment.
+#
+# Installed by hand: copy deploy/compose.yml and deploy/postgres/ to /opt/horeca/deploy/ on the server
+# (README → Deployment → "One-time server setup"). Re-copy them whenever they change in the repo —
+# the server does NOT pull them from Git, so they can drift (checked by hand in the PR checklist).
+#
+# Run it only through deploy.sh, which sets the project, env file and IMAGE_TAG:
+#   staging     project horeca-staging      web 127.0.0.1:3001   Mailpit UI 127.0.0.1:8026
+#   production  project horeca-production   web 127.0.0.1:3000   Mailpit UI 127.0.0.1:8027   (D5-A1)
+#
+# Rules (CLAUDE.md → Infrastructure): every ports entry starts with 127.0.0.1; Postgres and Meilisearch
+# have no ports; mem_limit and log rotation on every container; each container gets ONLY the variables
+# its entry point needs (DATABASE_WORKER_URL → worker only, DATABASE_MIGRATE_URL → migrate only).
+# Image versions are the same exact pins as docker-compose.dev.yml.
+name: horeca-${APP_ENV:?set APP_ENV}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Shared by web and worker (assertEnv("web") / assertEnv("worker") in src/env.core.ts).
+x-app-env: &app-env
+  APP_ENV: ${APP_ENV}
+  APP_URL: ${APP_URL:?set APP_URL}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+  MEILI_HOST: ${MEILI_HOST:?set MEILI_HOST}
+  MEILI_API_KEY: ${MEILI_API_KEY:?set MEILI_API_KEY}
+  EMAIL_FROM: ${EMAIL_FROM:?set EMAIL_FROM}
+  SMTP_URL: ${SMTP_URL:?set SMTP_URL}
+  PAYMENT_GATEWAY_URL: ${PAYMENT_GATEWAY_URL:?set PAYMENT_GATEWAY_URL}
+  PAYMENT_GATEWAY_API_KEY: ${PAYMENT_GATEWAY_API_KEY:?set PAYMENT_GATEWAY_API_KEY}
+  SUPPLIER_API_URL: ${SUPPLIER_API_URL:?set SUPPLIER_API_URL}
+  SUPPLIER_API_KEY: ${SUPPLIER_API_KEY:?set SUPPLIER_API_KEY}
+  AI_ENABLED: ${AI_ENABLED:-false}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+  # MEDIA_DIR (/data/media), MIGRATIONS_DIR and PLAYWRIGHT_BROWSERS_PATH are set by the image.
+
+x-app: &app
+  image: ghcr.io/horeca-ai-dev/horeca-marketplace:${IMAGE_TAG:?IMAGE_TAG is set by deploy.sh}
+  init: true # signals reach Node (README → CI/CD)
+  restart: unless-stopped
+  logging: *logging
+
+services:
+  web:
+    <<: *app
+    environment:
+      <<: *app-env
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?set BETTER_AUTH_URL}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
+      REGISTRATION_OPEN: ${REGISTRATION_OPEN:-false}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?set PAYMENT_WEBHOOK_SECRET}
+    ports:
+      - "127.0.0.1:${WEB_PORT:?set WEB_PORT}:3000"
+    volumes:
+      - media:/data/media
+    mem_limit: ${WEB_MEM_LIMIT:-384m}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # The image has no curl. 200 = database + migrations OK ("degraded" counts as healthy).
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    <<: *app
+    command: ["node", "dist/worker.mjs"]
+    environment:
+      <<: *app-env
+      DATABASE_WORKER_URL: ${DATABASE_WORKER_URL:?set DATABASE_WORKER_URL}
+    volumes:
+      - media:/data/media
+    mem_limit: ${WORKER_MEM_LIMIT:-768m} # Chromium renders PDFs here
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # No healthcheck: the worker has no HTTP port. /api/health reports it as "degraded" when the
+    # oldest waiting job is older than 5 minutes.
+
+  # One-off: `docker compose run --rm migrate` (deploy.sh). Not started by `up`.
+  migrate:
+    <<: *app
+    profiles: ["migrate"]
+    restart: "no"
+    command: ["node", "dist/migrate.mjs"]
+    environment:
+      DATABASE_MIGRATE_URL: ${DATABASE_MIGRATE_URL:?set DATABASE_MIGRATE_URL}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    mem_limit: ${MIGRATE_MEM_LIMIT:-256m}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16.15-trixie
+    restart: unless-stopped
+    environment:
+      # The image's superuser — used by the init script (empty volume only) and backup.sh.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      # Read by postgres/init/01-roles.sh to create the three logins.
+      POSTGRES_OWNER_PASSWORD: ${POSTGRES_OWNER_PASSWORD:?set POSTGRES_OWNER_PASSWORD}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?set POSTGRES_APP_PASSWORD}
+      POSTGRES_WORKER_PASSWORD: ${POSTGRES_WORKER_PASSWORD:?set POSTGRES_WORKER_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # The SAME script as local and CI. Runs only when postgres-data is empty (staging: staging-reset).
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    mem_limit: ${POSTGRES_MEM_LIMIT:-384m}
+    healthcheck:
+      # TCP on purpose: unhealthy until the init script has finished (see docker-compose.dev.yml).
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    logging: *logging
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.56.2
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: production
+      # TODO(search): give the app a scoped API key instead of the master key (README → Server).
+      # For now MEILI_API_KEY in .env is the master key.
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY}
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meili-data:/meili_data
+    mem_limit: ${MEILI_MEM_LIMIT:-256m}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7700/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging: *logging
+
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    restart: unless-stopped
+    environment:
+      # Our Nginx serves the UI at https://<domain>/_mail/ (behind basic auth).
+      MP_WEBROOT: /_mail/
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:?set MAILPIT_UI_PORT}:8025" # web UI only; SMTP stays internal
+    mem_limit: ${MAILPIT_MEM_LIMIT:-64m}
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging: *logging
+
+  # TODO(D6-A3): mock-services (4th entry of the image) — card gateway + supplier stock API, routed by
+  # our Nginx at /gateway/. Until then PAYMENT_GATEWAY_URL / SUPPLIER_API_URL point at nothing.
+
+# Named per project (horeca-staging_media, …): staging and production never share a volume.
+volumes:
+  postgres-data:
+  meili-data:
+  media:
