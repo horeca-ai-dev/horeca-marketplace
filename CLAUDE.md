@@ -19,7 +19,7 @@ Before implementing: **name the task ID and spec section** it belongs to and rea
 
 ## Stack (decided — do not substitute)
 Next.js 16.4 (App Router) · TypeScript strict · Node.js 26 LTS · PostgreSQL 16 · Drizzle ORM · Better Auth (organization plugin) · Zod · next-safe-action · next-intl (decision 012) · Tailwind + shadcn/ui · TanStack Table · React Hook Form · Meilisearch 1.56 · pg-boss (job queue inside PostgreSQL — no Redis) · **media files on a Docker volume** behind `src/server/storage` + sharp (3 WebP sizes) · Playwright (PDF rendering in the worker, and E2E tests) · React Email · SMTP to Mailpit in every environment · pino · Vitest · Testcontainers · fast-check · Docker Compose · GitHub Actions · GHCR · Nginx · Tailscale.
-**Versions:** exact versions pinned (no `^`) — record the pinned pg-boss and Better Auth versions here, since behaviour was checked against them; a new dependency or upgrade must be **at least two weeks old** — except security releases of things we already use. Fallback if a library does not support Node 26: Node 24.
+**Versions:** exact versions pinned (no `^`) — record the pinned pg-boss and Better Auth versions here, since behaviour was checked against them (**Better Auth 1.7.20**); a new dependency or upgrade must be **at least two weeks old** — except security releases of things we already use. Fallback if a library does not support Node 26: Node 24.
 **Next.js 16 specifics:** check the 16.4 docs before using any Next.js API (16.x is newer than much training data) · Cache Components **off**, every page dynamic · route guards in layouts + `proxy.ts` (Next 16's name for middleware) · `serverActions.allowedOrigins` = both domains.
 
 ## Commands
@@ -27,6 +27,8 @@ Next.js 16.4 (App Router) · TypeScript strict · Node.js 26 LTS · PostgreSQL 1
 pnpm install
 docker compose -f docker-compose.dev.yml up -d   # Postgres (+ init script with the 3 logins), Meilisearch, Mailpit
 pnpm db:migrate          # apply migrations
+pnpm db:generate         # new migration from the Drizzle schema (add the new tables' grants by hand)
+pnpm auth:generate       # regenerate the Better Auth tables after changing its config
 pnpm db:seed             # demo data
 pnpm dev                 # web app → http://localhost:3000
 pnpm worker:dev          # pg-boss worker (separate terminal)

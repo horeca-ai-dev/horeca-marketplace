@@ -1,7 +1,7 @@
 /**
  * The single place that reads process.env (CLAUDE.md rule 14, enforced by ESLint).
  *
- * D2-B1 starts this file with the database keys only, because the db clients need them first.
+ * D2-B1 started this file with the database keys, D2-B2 added the Better Auth keys.
  * D2-A4 (Bogdan) extends it with the remaining keys, Zod validation and the build-time switch.
  *
  * Each key is checked when it is READ, not when this file is imported. The migrate and worker
@@ -35,6 +35,22 @@ export const env = {
   /** Where the migrate entry finds the SQL files; the bundled migrate image may point elsewhere. */
   get MIGRATIONS_DIR() {
     return process.env.MIGRATIONS_DIR || "src/server/db/migrations";
+  },
+  /** Public URL of this deployment (e.g. https://staging.horeca.bogdandelic.online). */
+  get APP_URL() {
+    return required("APP_URL");
+  },
+  /** Base URL Better Auth uses for its own links and cookies (normally = APP_URL). */
+  get BETTER_AUTH_URL() {
+    return required("BETTER_AUTH_URL");
+  },
+  /** Signs session cookies. At least 32 random characters; different per environment. */
+  get BETTER_AUTH_SECRET() {
+    return required("BETTER_AUTH_SECRET");
+  },
+  /** "true" = anyone may register. Seed users are created server-side regardless. */
+  get REGISTRATION_OPEN() {
+    return process.env.REGISTRATION_OPEN === "true";
   },
   /** For dev tools that work without a value (drizzle-kit generate/check need no database). */
   has(
