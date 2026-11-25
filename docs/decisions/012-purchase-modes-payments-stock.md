@@ -1,6 +1,6 @@
 # 012 — Purchase modes, contracts, card payments, supplier stock, onboarding, language
 
-Date 25.11.2026 · Authors @BogdanD3 with Claude, reviewed by an independent review (Fable, decision-12 round) · **Status: accepted**
+Date 25.11.2026 · Authors @BogdanD3 with Claude, reviewed by an independent review (Fable, decision-12 round) · **Status: accepted** · *Amended 25.11.2026: five gaps found while applying it to the docs are resolved in §4, §6, §7, §12, §13 (worker grant for `supplier_submission`, refund rows from the worker, no `sale_reversal` for direct, supplier-API env, gateway-API task).*
 
 ## Context
 On 25.11 the mentors decided how purchasing works and answered our open questions. These decisions **replace** parts of the plan (they are the agreed way of doing the original features). The review reproduced four flows that would have failed under the current roles and policies; their fixes are part of this decision. **Where this file disagrees with `docs/decisions-9-11/` or with older text in README / CLAUDE / DESIGN / TASKS, this file wins.**
@@ -43,8 +43,9 @@ One checkout can mix modes. Cart per supplier group: contract active → "Order 
 ## 4. Orders, money, ledger
 - `sub_orders.mode`: `direct` | `platform`; `direct` only if the contract is `active` when the checkout transaction runs (revalidated inside it). Optional second layer: `sub_orders_insert` requires an active agreement for `direct`.
 - `orders.payment_method` is removed (mode per sub-order; card for the platform part).
-- **Keep `order_payments` and `app.recompute_order()`** (and their tests). The worker inserts a `receipt` on `payment.succeeded` and a `refund` on `refund.succeeded`. One change in `recompute_order`: the amount due counts **platform** sub-orders only; an order with none gets `not_applicable` (new value of `orders.payment_status`). Only the manual "record buyer payment" admin screen is removed.
+- **Keep `order_payments` and `app.recompute_order()`** (and their tests). The worker inserts a `receipt` on `payment.succeeded` and a `refund` on `refund.succeeded` — so `order_payments_worker_insert` allows `type IN ('receipt', 'refund')` (still with `payment_id` set and no `recorded_by_user_id`). One change in `recompute_order`: the amount due counts **platform** sub-orders only; an order with none gets `not_applicable` (new value of `orders.payment_status`). Only the manual "record buyer payment" admin screen is removed.
 - **Commission per sub-order for both modes** (unchanged formula).
+- **`sub_orders.supplier_submission`** is written by the worker: `GRANT UPDATE (supplier_submission) ON sub_orders TO horeca_worker` and a worker UPDATE policy limited to that column (the column grant is what limits it; the policy only lets the row be updated).
 - **Ledger** (+ = platform owes the supplier more):
   | Event | platform | direct |
   |---|---|---|
@@ -52,7 +53,7 @@ One checkout can mix modes. Cart per supplier group: contract active → "Order 
   | Cancellation | `sale_reversal` −gross, `commission_reversal` +commission | `commission_reversal` +commission |
   | Supplier pays commission | — | **new** `commission_payment` +amount (admin records it) |
   | Payout / adjustment | as before | adjustment only |
-- Schema rules: `ledger_entries_sign` gets `commission_payment > 0`; `ledger_insert_platform` allows `payout`, `adjustment`, `commission_payment`; `ledger_insert_checkout` refuses `sale` for a direct sub-order.
+- Schema rules: `ledger_entries_sign` gets `commission_payment > 0`; `ledger_insert_platform` allows `payout`, `adjustment`, `commission_payment`; `ledger_insert_checkout` refuses `sale` for a direct sub-order; `ledger_insert_reversal` refuses `sale_reversal` for a direct sub-order.
 - Invariants: platform `payable + commission = gross`; direct sub-order entries sum to −commission; cancelled sub-orders sum to 0; a supplier balance may be negative.
 - **M2:** `subOrder.ship` requires `paid` for platform sub-orders (optional second layer: the supplier update policy refuses `shipped` unless direct or paid). Confirming before payment is allowed.
 - **Cancellation by the system:** one `SECURITY DEFINER` function `app.system_cancel_sub_order(id, reason)`, executable **by `horeca_worker` only**: sets `cancelled` with the reason, writes the event, books the reversals, recomputes the order. Used by payment expiry and by a supplier-API rejection. Tested.
@@ -69,13 +70,14 @@ Created **once at checkout** for the **platform part** of the order (totals = th
 - **Callback route handler (web):** verify the HMAC-SHA256 signature on the raw body (constant time, timestamp tolerance) → enqueue **one job** with the event → answer 200. If our `payments` row does not exist yet, answer non-2xx (the gateway retries).
 - **Worker (system login) processes the event:** insert `payment_events` (duplicate event ID → no-op), check amount and currency, update `payments`, insert the `order_payments` receipt / refund, call `app.recompute_order()`, then submit platform sub-orders to the supplier API (§7) and enqueue e-mails.
 - **States:** `created → pending → succeeded | failed | cancelled | expired`; refunds tracked by `refunded_cents`. Several attempts per order allowed, at most one `succeeded`. Sale = authorise + capture in one step.
-- **Gateway API:** `POST /payments`, `GET /payments/{id}` (status query, used by expiry), refunds; callbacks retried on failure.
+- **Gateway API:** `POST /payments`, `GET /payments/{id}` (status query, used by expiry), refunds; signed callbacks (HMAC-SHA256) retried on failure; admin "replay last callback" (basic auth). Built in task D10-B3 inside `mock-services`; the hosted card page is D10-A3.
 - **Before G3:** test cards **success** and **declined**, one callback retry, the admin **"replay last callback"** button (idempotency demo), forged signature rejected. **After G3:** 3-D Secure step, insufficient funds, processing error / timeout.
 - **Safety:** fixed banner "TEST — do not enter a real card"; only documented test numbers accepted; numbers never logged or stored; the gateway admin page behind basic auth in every environment.
-- Tables `payments`, `payment_events` move from stretch into the MVP. Env: `PAYMENT_GATEWAY_URL`, `PAYMENT_GATEWAY_API_KEY`, `PAYMENT_WEBHOOK_SECRET`.
+- Tables `payments`, `payment_events` move from stretch into the MVP. Env: `PAYMENT_GATEWAY_URL`, `PAYMENT_GATEWAY_API_KEY`, `PAYMENT_WEBHOOK_SECRET`; for the stock API (§7) `SUPPLIER_API_URL`, `SUPPLIER_API_KEY`.
 
 ## 7. Supplier stock API (mock)
 - Lives in **`mock-services`**: `GET /suppliers/{id}/stock?skus=…`, `POST /suppliers/{id}/orders` (idempotent by sub-order ID; decrements stock, may reject lines). Behaviours per supplier: **normal · down (503) · some SKUs out of stock**. In-memory state seeded on start from the same data as the catalogue.
+- Our app calls it with `SUPPLIER_API_URL` + `SUPPLIER_API_KEY` (one mock for all suppliers; the supplier ID is in the path).
 - Cache `product_stock` (`product_id`, `available_qty`, `status` ok | unknown, `fetched_at`; read policy for logged-in users; written by the worker), refreshed by a scheduled pg-boss job every 5 min, shown as a **badge** (no filter in the MVP).
 - **Checkout:** a fresh stock check per supplier in the request **before** the transaction (2–3 s timeout); inside the transaction only our own data is revalidated. API down → that supplier group shows "availability unknown" and cannot be ordered; the other groups can.
 - **Submission:** `sub_orders.supplier_submission` (`pending`, `accepted`, `rejected`, `failed`). Direct mode: submitted after commit. Platform mode: submitted after `payment.succeeded` (an unpaid order holds no stock). Any rejected line → `app.system_cancel_sub_order` + e-mails (and an automatic refund if paid). Retries exhausted → `failed`, nothing cancelled automatically (admin sees it).
@@ -103,8 +105,8 @@ Created **once at checkout** for the **platform part** of the order (totals = th
 - **DESIGN.md / README.md:** Montenegrin; buyer-only registration; three modes; stock badge; gateway banner.
 
 ## 12. Migrations
-**D4 (order core):** `sub_orders.mode`, `sub_orders.supplier_submission`, `orders.payment_status` + `not_applicable`, `orders.payment_method` removed, `ledger_entries` (`commission_payment` + sign rule + policy edits), invoice totals = platform part, `recompute_order` change, identity policy / guard edits (§8), tests updated.
-**D5 (second migration):** `supplier_agreements` (+ policies, column grant, tests), `payments` + `refunded_cents`, `payment_events`, `product_stock` (+ read policy, worker write), `app.system_cancel_sub_order()` (+ tests). **ERD freeze: D5 evening.**
+**D4 (order core):** `sub_orders.mode`, `sub_orders.supplier_submission` (+ worker column grant and update policy), `orders.payment_status` + `not_applicable`, `orders.payment_method` removed, `ledger_entries` (`commission_payment` + sign rule + policy edits incl. no `sale_reversal` for direct), invoice totals = platform part, `recompute_order` change, identity policy / guard edits (§8), tests updated.
+**D5 (second migration):** `supplier_agreements` (+ policies, column grant, tests), `payments` + `refunded_cents`, `payment_events`, `order_payments_worker_insert` for `receipt` and `refund`, `product_stock` (+ read policy, worker write), `app.system_cancel_sub_order()` (+ tests). **ERD freeze: D5 evening.**
 Stretch tables still later: `price_tiers`, `buyer_prices`, `rfq_*`.
 
 ## 13. Plan changes (`TASKS.md`)
@@ -127,6 +129,7 @@ Stretch tables still later: `price_tiers`, `buyer_prices`, `rfq_*`.
 | D9-A1 | Checkout per mode + redirect to the gateway |
 | D9-A3 / D10-A2 (new, A ≈ 5h) | Contract UI: request (supplier group / supplier page), supplier inbox, buyer "My contracts" |
 | D10-A3 (new, A 3h) | Gateway hosted page (test banner, success / declined) + return / status page |
+| D10-B3 (new, B 3h) | Gateway API in `mock-services`: `POST /payments`, `GET /payments/{id}`, signed callback (HMAC-SHA256) with retry, admin "replay last callback" (basic auth), test cards success / declined |
 | D11-B2 | Replaced: payment integration — createPayment, callback route → job, worker processing, expiry via status query, submission after payment |
 | D11-B1 | + commission_payment recording (direct) next to payouts |
 | D12-B1 | Ship requires paid (platform); expiry and rejection via `app.system_cancel_sub_order` |
