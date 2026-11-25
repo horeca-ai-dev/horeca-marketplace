@@ -1,4 +1,46 @@
-# Scraped seed data (decision 012 §9) — never baked into an image
-.seed-private/
+# Build context for the Dockerfile (D2-A4). Allowlist would be stricter but easier to break; this
+# list keeps out everything the build does not need and everything that must never be in an image.
 
-# The rest of the build-context exclusions come with the Dockerfile (TASKS D2-A4).
+# Secrets and private data — never baked into an image (configuration comes from the container env)
+.env*
+.seed-private/
+*.pem
+
+# Installed / generated (rebuilt inside the image)
+node_modules/
+.next/
+dist/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+.media/
+
+# Tests and their output
+tests/
+coverage/
+playwright-report/
+test-results/
+**/*.test.ts
+
+# Version control, CI, editors, tooling
+.git/
+.github/
+.husky/
+.idea/
+.vscode/
+.claude/
+.mcp.json
+.gitleaks.toml
+*.log
+.DS_Store
+
+# Documentation (no Markdown is read by the build)
+docs/
+*.md
+
+# Local-only infrastructure
+docker-compose*.yml
+deploy/
+Dockerfile
+.dockerignore
