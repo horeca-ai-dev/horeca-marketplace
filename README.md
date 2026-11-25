@@ -6,30 +6,42 @@
 **Status:** 🚧 in development · **Production:** https://horeca.bogdandelic.online · **Staging:** https://staging.horeca.bogdandelic.online (basic auth) · **Repo:** github.com/horeca-ai-dev/horeca-marketplace · **Spec:** [`docs/specification/`](docs/specification/)
 
 ## What it does
-Suppliers list products manually or via CSV import with a validation report. Buyers — companies, not individuals — search one structured catalogue (category-specific attributes, filters, typo- and diacritics-tolerant search) and check out **once** for products from **several suppliers**. The platform splits the checkout into **per-supplier sub-orders** with independent statuses, computes the **platform commission**, records what each supplier is owed in an **append-only ledger**, and issues **one pro-forma invoice PDF per order** (issued by the platform, which the buyer pays). A platform admin approves suppliers, manages categories and commission, records buyer payments, refunds and supplier payouts, and sees commission owed per supplier.
+Suppliers are companies **onboarded by the platform admin** (public registration is for **buyers only**). They list products manually or via CSV import with a validation report; **stock comes only from each supplier's API** (mocked) and is shown as a badge. Buyers — companies, not individuals — search one structured catalogue (category-specific attributes, filters, typo- and diacritics-tolerant search) and check out **once** for products from **several suppliers**, choosing a **purchase mode per supplier group**:
 
-**No real money flows.** Payments are recorded in an internal ledger and settled by invoice.
+| Mode | When | Payment | Commission |
+|---|---|---|---|
+| **Direct** | Active contract with that supplier | Buyer and supplier invoice and pay each other outside the platform | Charged to the supplier per sub-order; the admin records its payment |
+| **Platform (card)** | Always | Buyer pays the platform by card through a **mock gateway**; the platform issues the pro-forma and pays the supplier later | Kept from the payout (gross − commission) |
+| **Request a contract** | No active contract | Not a purchase: the supplier accepts or rejects; an active contract enables direct mode | — |
+
+The platform splits the checkout into **per-supplier sub-orders** with independent statuses and modes, computes the **platform commission**, records what each supplier is owed (or owes) in an **append-only ledger**, and issues **one pro-forma invoice PDF for the platform part** of an order. A platform admin creates suppliers, manages categories and commission, records supplier payouts and commission payments, and sees commission per supplier. The UI, e-mails and invoices are in **Montenegrin**.
+
+**No real money flows.** Card payments go to a mock gateway with test cards only; money owed is recorded in an internal ledger. Decision record: [`docs/decisions/012-purchase-modes-payments-stock.md`](docs/decisions/012-purchase-modes-payments-stock.md).
 
 ### Feature checklist
 **MVP**
 - [ ] Organizations: buyer, supplier, platform admin · owner/member roles · one user in several organizations (org switcher)
-- [ ] Supplier approval (pending → approved / rejected, suspended) · tenant isolation (tested)
+- [ ] Buyer-only registration · admin "Create supplier" (set-password link) · tenant isolation (tested)
 - [ ] Category tree with category-specific attributes · product CRUD · images
 - [ ] Supplier CSV import with validation report
-- [ ] Catalogue behind login · search (Meilisearch) + filters (category, price, supplier, attributes)
-- [ ] Multi-supplier cart · checkout · order splitting into sub-orders · sub-order lifecycle
-- [ ] Commission · per-supplier ledger and balance · pro-forma invoice PDF · admin overview
-- [ ] Recording buyer payments and refunds · recording supplier payouts and adjustments
-- [ ] E-mail (Mailpit inbox): order notifications to supplier and buyer · password reset
+- [ ] Catalogue behind login · search (Meilisearch) + filters (category, price, supplier, attributes) · stock badge from the supplier API
+- [ ] Multi-supplier cart with a purchase mode per supplier group · checkout · order splitting into sub-orders · sub-order lifecycle
+- [ ] Contracts: request → accept / reject → end
+- [ ] Card payment via a `PaymentProvider` + mock gateway (signed callbacks, expiry, refunds on cancellation)
+- [ ] Sub-orders submitted to the supplier API (stock decremented, lines may be rejected)
+- [ ] Commission in both modes · per-supplier ledger and balance · pro-forma invoice PDF (platform part) · admin overview
+- [ ] Recording supplier payouts, adjustments and commission payments
+- [ ] E-mail (Mailpit inbox): order, contract and payment notifications · password and set-password links
+- [ ] Montenegrin UI, e-mails and invoice (`next-intl`)
 
 **Stretch (after the MVP gate — the brief's stretch goals, in this order; see `TASKS.md`)**
-- [ ] S1 Volume pricing tiers · buyer-specific prices
+Realistically 1–2 of them:
 - [ ] S3 AI attribute normalisation
 - [ ] S4 AI natural-language search
+- [ ] S1 Volume pricing tiers · buyer-specific prices
 - [ ] S5 Request for quote (RFQ)
-- [ ] S6 Card payment via a `PaymentProvider` + mock gateway
 
-*Only if time:* S2 product compare · S7 member invitations by e-mail
+*Only if time:* S2 product compare · S7 member invitations by e-mail · English UI
 
 ## Tech stack
 | Layer | Choice | Why |
@@ -40,6 +52,7 @@ Suppliers list products manually or via CSV import with a validation report. Buy
 | Search | Meilisearch behind `searchProducts()` | Typo and diacritics tolerance ("frizider" → "frižider") |
 | Auth | Better Auth + organization plugin | Self-hosted; companies with members map onto organizations |
 | Validation | Zod | One schema for forms, actions and CSV rows |
+| i18n | next-intl | Montenegrin (Latin) UI, e-mails, invoice and error messages from day one |
 | UI → server | Server Components (reads) + Server Actions via next-safe-action (writes) | No API layer to maintain; typed end to end |
 | UI | shadcn/ui + Tailwind, TanStack Table, React Hook Form | Owned components, data-dense dashboards, fast forms |
 | Jobs | pg-boss (queue inside PostgreSQL) | Jobs are enqueued in the same transaction as the data, so none are lost; no Redis to run |
@@ -47,6 +60,7 @@ Suppliers list products manually or via CSV import with a validation report. Buy
 | PDF | Playwright HTML → PDF, in the worker | Print-quality invoices from React/Tailwind templates |
 | E-mail | React Email templates · SMTP to Mailpit in every environment | The brief needs no real e-mail; demo e-mails are shown in the Mailpit inbox; a real provider = one env variable later |
 | Tests | Vitest · Testcontainers · fast-check · Playwright · `psql` | Real Postgres/Meilisearch; RLS SQL tests; property tests for money; E2E on staging |
+| Mocks | `mock-services` — card gateway + supplier stock API, the **fourth entry point** of the image (web, worker, migrate, mock-services) | Realistic payment and stock flows with no external accounts; behaviours (declined card, API down, out of stock) can be demoed |
 | Ops | Docker Compose · GitHub Actions · GHCR · Tailscale · Nginx · pino | Build once, promote the same image |
 | Versions | Node.js 26 LTS · PostgreSQL 16 · Next.js 16.4 · Meilisearch 1.56 | Exact versions pinned; upgrades ≥ 2 weeks old except security releases |
 
@@ -57,9 +71,9 @@ flowchart LR
   PX -->|Tailscale| NG[Nginx<br/>basic auth on staging]
   NG -->|127.0.0.1| WEB
   subgraph APP[Docker Compose project per environment]
-    WEB["Next.js web<br/>Server Components · Server Actions<br/>route handlers (uploads, media, PDF, health)"]
+    WEB["Next.js web<br/>Server Components · Server Actions<br/>route handlers (uploads, media, PDF, health, payment callback)"]
     WEB --> DOM["Domain layer (framework-free)<br/>policy · money · state machines · services"]
-    WRK["Worker (pg-boss)<br/>email · search sync · PDF · image sizes · CSV"] --> DOM
+    WRK["Worker (pg-boss)<br/>email · search sync · PDF · image sizes · CSV<br/>payment events · stock sync · supplier submission"] --> DOM
     DOM --> PG[(PostgreSQL<br/>data · RLS · job queue)]
     PG -->|jobs| WRK
     DOM -->|searchProducts| MS[(Meilisearch)]
@@ -67,9 +81,13 @@ flowchart LR
     WEB --> MV[(Media volume<br/>images · invoice PDFs)]
     WRK --> MV
     WRK -->|SMTP| MAIL[Mailpit]
+    MOCK["mock-services<br/>card gateway (/gateway/) · supplier stock API"]
+    WEB -->|createPayment · stock check<br/>2–3 s timeout| MOCK
+    MOCK -->|signed callback| WEB
+    WRK -->|status query · stock · submit order| MOCK
   end
 ```
-More diagrams: [`docs/diagrams/`](docs/diagrams/).
+The buyer reaches the gateway's hosted card page through the same proxies (`/gateway/` → `mock-services`). More diagrams: [`docs/diagrams/`](docs/diagrams/) (not yet updated for decision 012).
 
 ## ⚠️ Environment variables: build once, run anywhere
 
@@ -121,6 +139,9 @@ Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the folder
 | `EMAIL_FROM`, `SMTP_URL` | SMTP to Mailpit in every environment |
 | `REGISTRATION_OPEN` | `true` / `false` — close registration on production if needed |
 | `SEED_DEMO_PASSWORD` | Password for seeded demo accounts; required on production (never the README password) |
+| `PAYMENT_GATEWAY_URL` | Base URL of the mock gateway (`mock-services`) as seen from web and worker |
+| `PAYMENT_GATEWAY_API_KEY` | API key our app sends to the gateway |
+| `PAYMENT_WEBHOOK_SECRET` | HMAC-SHA256 secret for verifying payment callbacks (shared with `mock-services`; different per environment) |
 | `AI_ENABLED` | `false` by default; `true` only for testing and the demo (stretch S3/S4) |
 | `APP_ENV` | `local` / `staging` / `production` — staging banner (runtime, never `NEXT_PUBLIC_*`) |
 | `LOG_LEVEL` | pino log level |
@@ -130,7 +151,7 @@ Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the folder
 | Account | E-mail | Password |
 |---|---|---|
 | Platform admin | `admin@demo.local` | `Demo-1234!` |
-| Supplier A / B / C (owners) | `supplier-a@demo.local` … `supplier-c@demo.local` | `Demo-1234!` |
+| Supplier A / B / C (owners; created by the seed — suppliers cannot self-register) | `supplier-a@demo.local` … `supplier-c@demo.local` | `Demo-1234!` |
 | Buyer: hotel / café | `buyer-hotel@demo.local`, `buyer-cafe@demo.local` | `Demo-1234!` |
 | One company, two organizations (buyer + supplier) | `multi@demo.local` | `Demo-1234!` |
 
@@ -210,7 +231,7 @@ flowchart LR
   PROD -->|unhealthy| RB[Manual: redeploy previous SHA]
 ```
 - **PR checks** run in parallel on GitHub runners (target < 10 min); a new push cancels the stale run. *Migration check* = `drizzle-kit check` + applying all migrations to an empty database; *RLS SQL tests* = `rls_tests.sql` via `psql`.
-- **Image:** multi-stage Dockerfile, Next.js `output: 'standalone'`, one image with three entry points: web, worker, migrate.
+- **Image:** multi-stage Dockerfile, Next.js `output: 'standalone'`, one image with four entry points: web, worker, migrate, mock-services.
 - **Migrations** run as a one-off `migrate` container using Drizzle's runtime migrator.
 - **Deploy** over SSH as the dedicated `deploy` user running `deploy.sh <env> <sha>`. The server is reachable only through Tailscale, so the deploy job first joins the tailnet with the official **Tailscale GitHub Action** (`tailscale/github-action@v4`) using **Tailscale federated identity (workload identity federation)** — no long-lived Tailscale secret. The workflow sets `permissions: id-token: write` and passes `oauth-client-id`, `audience` and `tags: tag:ci`. The federated credential trusts only GitHub jobs whose subject matches `repo:horeca-ai-dev/horeca-marketplace:environment:*` (the deploy jobs in the `staging` / `production` Environments). The tailnet grant allows `tag:ci` only `tcp:22` on the server's Tailscale IP. GitHub stores the SSH key (secret) and `TS_OAUTH_CLIENT_ID` + `TS_AUDIENCE` (identifiers, not sensitive) per Environment.
 - **E2E on staging:** a smoke test after every deploy; the full suite before each gate. Playwright runs from GitHub against the staging URL; basic-auth credentials are a GitHub Environment secret; tests create unique data per run.
@@ -254,7 +275,7 @@ flowchart LR
 | Staging | Server, Compose project `horeca-staging`, behind basic auth | Seed, resettable (`deploy.sh staging --reset`) |
 | Production | Server, Compose project `horeca-prod` | Real |
 
-- **Isolation:** staging and production have separate Compose projects, networks, volumes, `.env` files and media volumes, plus `mem_limit` on every container. Each runs web, worker, Postgres (with the job queue), Meilisearch and Mailpit. The Mailpit UI is served by our Nginx at `/_mail/` behind basic auth (shown on screen in the demo — no SSH tunnel needed).
+- **Isolation:** staging and production have separate Compose projects, networks, volumes, `.env` files and media volumes, plus `mem_limit` on every container. Each runs web, worker, mock-services, Postgres (with the job queue), Meilisearch and Mailpit. Our Nginx routes `/gateway/` to `mock-services`; the gateway's admin page is behind basic auth in every environment. The Mailpit UI is served by our Nginx at `/_mail/` behind basic auth (shown on screen in the demo — no SSH tunnel needed).
 - **Domains & traffic:** `horeca.bogdandelic.online` (production) and `staging.horeca.bogdandelic.online` — A records at Namecheap pointing to the friend's public server, which terminates TLS (certbot) and forwards over **Tailscale** to our server. It must pass `X-Forwarded-For`, `X-Forwarded-Proto: https` and the host, allow ≈ 20 MB uploads and slightly longer timeouts.
 - **Our Nginx (on the server, listening on the Tailscale address only):** one site per environment → `127.0.0.1:3000` (prod) / `127.0.0.1:3001` (staging); `auth_basic` on staging; `set_real_ip_from` = friend's Tailscale IP; `X-Forwarded-Proto` passed through unchanged; `client_max_body_size` ≈ 20 MB.
 - **⚠️ Ports:** every `ports:` entry starts with `127.0.0.1:` (e.g. `127.0.0.1:3000:3000` prod, `127.0.0.1:3001:3000` staging). The short form `"3000:3000"` binds to all interfaces, and Docker's iptables rules are evaluated **before ufw** — the port becomes public even though ufw "blocks" it. Postgres and Meilisearch have **no** `ports:` entry on the server.
@@ -287,8 +308,14 @@ flowchart LR
 - Mailpit for all e-mail *(Resend — the brief needs no real e-mail; seeded addresses cannot receive mail)*
 - Manual rollback with a pre-deploy dump *(automatic rollback — requires every migration to be backward-compatible)*
 - Normal invoice number sequence *(gapless numbering — a pro-forma has no legal numbering requirement; it serialises all checkouts)*
-- Buyers pay the platform; the platform owes each supplier gross − commission *(buyers pay suppliers directly — awaiting mentor feedback)*
-- One pro-forma per order issued by the platform *(one per sub-order — buyer pays several times)*
+- Three purchase modes chosen **per supplier group** — direct under a contract, platform by card, request a contract (decision 012) *(mode per whole order — forces buyers to split carts; buyers pay the platform only — mentors decided against it)*
+- Keep `order_payments` + `app.recompute_order()`; the worker inserts receipts / refunds from gateway events *(dropping them — throws away tested logic; manual "record buyer payment" screen — receipts now come from the gateway)*
+- Payment callbacks verified and enqueued by the web, processed by the worker *(processing in the web container — no actor context there)*
+- One `mock-services` app for gateway + stock API, fourth entry point of the image *(two separate mock services — 3–4 h more infrastructure)*
+- Gateway depth in steps: success / declined / forged / replayed before G3, 3-D Secure and other cards after *(full depth before G3 — time)*
+- Suppliers onboarded by the admin; buyer-only registration *(self-registration + approval queue — the mentors want a list of collaborating companies, added by the admin)*
+- Stock only from the supplier API, cached every 5 min *(stock in CSV — mentors' decision: CSV is for product data only)*
+- One pro-forma per order for the **platform part**, issued by the platform *(one per sub-order — buyer pays several times; including direct sub-orders — the platform does not invoice those)*
 - Half-up rounding, VAT per line, commission once per sub-order on net, rates in basis points *(half-even; VAT on totals; commission per line)*
 - Supplier-owned listings + optional GTIN *(shared master catalogue with offers)*
 - Typed attribute definitions inherited down an `ltree` tree, values in JSONB *(EAV; table per category)*
@@ -299,14 +326,19 @@ Full ADRs: [`docs/decisions/`](docs/decisions/).
 ## Known limitations *(keep honest; update before the demo)*
 - No real payments, payouts or licensing; **holding third-party funds is a regulated activity** and needs legal review before any real launch.
 - No fiscalization (Montenegrin Tax Administration); VAT rates and PIB rules are configuration and must be verified before real use.
-- Single currency (EUR); English UI only.
+- Single currency (EUR); Montenegrin UI only (English only if time allows).
 - VAT on the platform commission is not modelled.
-- Shipping does not wait for payment; the payment status is informational.
+- The card gateway and the supplier APIs are **mocks** (test cards only; in-memory state reset on restart). 3-D Secure and the extra failure cards arrive after G3.
+- Stock is cached every 5 minutes; a badge may be up to 5 minutes old (the checkout re-checks it).
+- Refunds happen only by cancelling a paid platform sub-order before shipping; there is no separate admin refund action.
+- Direct-mode commission is netted against platform payouts and charged at order placement — **to confirm with the mentors**.
+- A new supplier's set-password link stays in Mailpit; the admin hands it over.
+- Product data is scraped from two real Montenegrin suppliers into a private, uncommitted seed; **production uses fictional supplier names and closed registration** unless the companies agree.
 - Buyer-specific prices (S1) are not filterable or sortable in search (the index holds the base price).
 - Buyers cannot be suspended; only suppliers.
 - E-mails go only to the Mailpit inbox (no real delivery).
-- Product photos in the seed are dummy images.
-- After a cancellation the stored pro-forma PDF keeps the original total; the order page shows the amount due.
+- Product photos in the generated seed are dummy images.
+- The pro-forma covers only the platform part; direct sub-orders are invoiced by the supplier outside the platform. After a cancellation the stored PDF keeps the original total; the order page shows the amount due.
 - The public proxy (friend's server) terminates HTTPS and could see traffic; fine for a demo with fake data, not for real customers. If that server is down, the site is down.
 - Media files (images, PDFs) live only on the server; the site cannot be spread across several servers.
 - Backups are stored on the same server — a disk failure loses data and backups together.
