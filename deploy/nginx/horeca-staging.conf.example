@@ -1,13 +1,17 @@
 # Our Nginx site for STAGING (D3-A2; README → Server & infrastructure).
-# Install: copy to /etc/nginx/sites-available/horeca-staging, replace the two <PLACEHOLDERS>, link it
+# Install: copy to /etc/nginx/sites-available/horeca-staging, replace <FRIEND_PROXY_TAILSCALE_IP>, link it
 # into sites-enabled, `nginx -t && systemctl reload nginx`. Needs horeca-upgrade-map.conf in conf.d.
-# The two Tailscale IPs are NEVER committed — they exist only in the installed copy on the server.
+# Tailscale IPs are NEVER committed — they exist only in the installed copy on the server.
 #
-# Traffic: visitor → friend's public proxy (TLS) → Tailscale → THIS server block → 127.0.0.1:3001 (web)
-#                                                                              → 127.0.0.1:8026 (Mailpit UI)
+# Traffic: visitor → friend's public proxy (TLS) → Tailscale → <SERVER_TAILSCALE_IP>:8081 → THIS server
+#          block → 127.0.0.1:3101 (web, WEB_PORT) / 127.0.0.1:8126 (Mailpit UI, MAILPIT_UI_PORT)
+# Staging and production share port 8081 and are told apart by server_name. Production (D5-A1):
+# horeca.bogdandelic.online → 127.0.0.1:3102 / 127.0.0.1:8127.
 server {
-    # The server's own Tailscale address only — never 0.0.0.0, so nothing outside the tailnet reaches it.
-    listen <SERVER_TAILSCALE_IP>:80;
+    # All interfaces (so Nginx starts even before tailscaled is up). What keeps 8081 private is the host
+    # firewall: it allows only the Tailscale interface (Nginx is a host process, so ufw applies to it —
+    # unlike Docker's published ports).
+    listen 8081;
     server_name staging.horeca.bogdandelic.online;
 
     # Real client IP. X-Forwarded-For is trusted ONLY when the request comes from the friend's proxy,
@@ -27,7 +31,7 @@ server {
     proxy_read_timeout 120s;           # longer than the default 60 s (CSV import, PDF download)
 
     location / {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:3101;   # = WEB_PORT in /opt/horeca/staging/.env
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Host $host;   # Next.js compares it with Origin for Server Actions
@@ -45,7 +49,7 @@ server {
         return 301 /_mail/;
     }
     location /_mail/ {
-        proxy_pass http://127.0.0.1:8026;
+        proxy_pass http://127.0.0.1:8126;   # = MAILPIT_UI_PORT
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
