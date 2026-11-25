@@ -93,7 +93,7 @@ The buyer reaches the gateway's hosted card page through the same proxies (`/gat
 
 We build ONE Docker image per commit and promote that same image from staging to production. It is never rebuilt.
 
-Next.js replaces every `process.env.NEXT_PUBLIC_*` reference with its literal value AT BUILD TIME. That value is frozen into the JavaScript bundle. Changing `.env.production` on the server does NOT change it.
+Next.js replaces every `process.env.NEXT_PUBLIC_*` reference with its literal value AT BUILD TIME. That value is frozen into the JavaScript bundle. Changing `/opt/horeca/production/.env` on the server does NOT change it.
 
 Consequence: any environment-specific value in a `NEXT_PUBLIC_*` variable (API URL, app URL, Meilisearch key, bucket URL…) would ship with staging's value into production — silently.
 
@@ -160,7 +160,7 @@ Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the folder
 | One company, two organizations (buyer + supplier) | `multi@demo.local` | `Demo-1234!` |
 
 ## Scripts
-`pnpm dev` · `pnpm worker:dev` · `pnpm build` · `pnpm build:entries` (bundles worker, migrate and seed into `dist/`) · `pnpm start` · `pnpm lint` · `pnpm typecheck` (`next typegen` + `tsc --noEmit`) · `pnpm format` · `pnpm format:check` · `pnpm test` · `pnpm test:integration` · `pnpm test:e2e` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:reset` · `pnpm search:reindex`
+`pnpm dev` · `pnpm worker:dev` · `pnpm build` · `pnpm build:entries` (bundles worker, migrate and seed into `dist/`) · `pnpm start` · `pnpm lint` · `pnpm typecheck` (`next typegen` + `tsc --noEmit`) · `pnpm format` · `pnpm format:check` · `pnpm test` · `pnpm test:integration` · `pnpm test:e2e` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:reset` · `pnpm search:reindex` · `scripts/smoke-g0.sh` (G0 smoke test; env `SMOKE_BASE_URL`, `SMOKE_BASIC_AUTH_USER`/`_PASS`)
 
 ## Project structure
 ```
@@ -179,7 +179,7 @@ src/
   env.ts            # server-only re-export for Next.js code
   instrumentation.ts # web startup: assertEnv("web")
   worker.ts         # worker entry point
-deploy/             # compose files (staging, prod), deploy.sh, Nginx site examples, backup script
+deploy/             # compose.yml (one file, per-env .env), deploy.sh, backup.sh, Nginx site examples, postgres/init/
 docs/               # specification/, decisions-9-11/ (schema drafts, matrix, money rules, RLS tests), decisions/ (ADRs), diagrams/
 tests/              # unit/, integration/, e2e/
 ```
@@ -282,13 +282,55 @@ flowchart LR
 - If production is broken after a deploy: re-run the deploy with the previous SHA or release tag (one click); if a migration broke data, restore the pre-deploy dump.
 - The health check gates deploys on Postgres + migration version only; Meilisearch, Mailpit and the worker are reported as degraded, not blocking.
 
+### Deploy files (staging since D3; production half = D5-A1)
+| File | Installed on the server as | What it does |
+|---|---|---|
+| `.github/workflows/deploy.yml` | — | push to `main` → build + push `ghcr.io/horeca-ai-dev/horeca-marketplace:<sha>` → join the tailnet → `ssh deploy@… "staging <sha>"` → `scripts/smoke-g0.sh` |
+| `deploy/deploy.sh` | `/opt/horeca/bin/deploy.sh` (root, 755) | the forced command of the deploy key: `staging <sha>` = pull → migrate (one-off) → `up` web + worker → wait ≤ 90 s for `/api/health` 200 → prune images (keep 5 SHAs); `staging-reset <sha>` = the same after `down --volumes` (**deletes all staging data**; the Postgres init script runs only on an empty volume, so this is also how changed DB passwords take effect; no seed entry yet → staging starts empty); `production …` → "not enabled yet". Log: `/opt/horeca/<env>/deploy.log`; current SHA: `/opt/horeca/<env>/deployed-sha` |
+| `deploy/compose.yml` + `deploy/postgres/init/` | `/opt/horeca/deploy/` | one Compose file for both environments; project `horeca-<APP_ENV>` (`horeca-staging` / `horeca-production`); values from `/opt/horeca/<env>/.env` |
+| `deploy/env.staging.example` | template for `/opt/horeca/staging/.env` (deploy, 600) | every key; hosts are the Compose service names |
+| `deploy/nginx/horeca-upgrade-map.conf.example` | `/etc/nginx/conf.d/horeca-upgrade-map.conf` | WebSocket `map` for `/_mail/`, shared by both sites |
+| `deploy/nginx/horeca-staging.conf.example` | `/etc/nginx/sites-available/horeca-staging` | Tailscale address only → `127.0.0.1:3001`, basic auth, real IP from the friend's proxy, `/_mail/` → Mailpit |
+| `deploy/backup.sh` + `deploy/cron.example` | `/opt/horeca/bin/backup.sh`, `/etc/cron.d/horeca-backup` | nightly `pg_dump` + media archive → `/var/backups/horeca/<env>/nightly/`, keep 7 (production cron line enabled with D5-A1) |
+| `scripts/smoke-g0.sh` | — | G0 smoke test (bash + curl): health, sign-up, sign-in, `/g0-check`, its Server Action (same Origin → `UNAUTHENTICATED` envelope; foreign Origin → refused), wrong password → 401; prints the manual two-network rate-limit check |
+
+**⚠️ Drift:** the server does not pull deploy files from Git. When `deploy/compose.yml`, `deploy/postgres/init/`, `deploy.sh`, `backup.sh` or an Nginx example changes, copy it to the server by hand in the same session as the merge (the next deploy uses whatever is on the server).
+
+**Memory:** our project gets ≈ 4 GB for staging + production together. Staging defaults (override in `.env`): web 384m, worker 768m, Postgres 384m, Meilisearch 256m, Mailpit 64m, migrate 256m (≈ 1.9 GB running). **Stop staging when not testing** (`docker compose -p horeca-staging stop`, as `deploy`); production stays up.
+
+**Not covered by G0:** the Server Action running as `horeca_app` with the RLS context set — the smoke user has no organization (only our registration creates one; form D4-A3). Proven by the D4/D5 RLS tests.
+
+**Meilisearch:** for now the app uses the master key (`MEILI_API_KEY` = `MEILI_MASTER_KEY`). TODO when search lands: a scoped key.
+
+### GitHub setup (once)
+Environment **`staging`** (Settings → Environments; deployment branches: `main` only) with these secrets:
+
+| Secret | Value |
+|---|---|
+| `TS_OAUTH_CLIENT_ID`, `TS_AUDIENCE` | from the Tailscale federated-identity credential (identifiers, not sensitive) |
+| `DEPLOY_HOST` | the server's Tailscale IP or MagicDNS name (never in the repo) |
+| `DEPLOY_SSH_KEY` | private half of the deploy key (ed25519, no passphrase) |
+| `DEPLOY_KNOWN_HOSTS` | the server's host-key line for `DEPLOY_HOST` (`ssh-keyscan`, fingerprint checked on the server) |
+| `STAGING_BASIC_AUTH_USER`, `STAGING_BASIC_AUTH_PASS` | the staging Nginx basic-auth login (used by the smoke test) |
+
+GHCR: the image package `horeca-marketplace` is **public** (the server pulls without a login). Production Environment + secrets: D5-A1.
+
+### One-time server setup (staging)
+Done already: user `deploy` (docker group), `/opt/horeca/{staging,production,bin}`, `/var/backups/horeca`. Then, as an admin user:
+1. Packages: `apt install curl apache2-utils` (curl for `deploy.sh`'s health wait, `htpasswd`).
+2. Deploy files: copy `deploy/compose.yml` → `/opt/horeca/deploy/compose.yml`, `deploy/postgres/init/01-roles.sh` → `/opt/horeca/deploy/postgres/init/` (world-readable: the Postgres container reads it), `deploy.sh` + `backup.sh` → `/opt/horeca/bin/` (root:root, 755).
+3. Secrets: `/opt/horeca/staging/.env` from `deploy/env.staging.example` with generated values (`chown deploy: … && chmod 600`); `/opt/horeca/staging` owned by `deploy` (lock, log, `deployed-sha`).
+4. Deploy key: `ssh-keygen -t ed25519 -N '' -C horeca-ci-deploy -f horeca-deploy` (on a laptop); append to `~deploy/.ssh/authorized_keys`: `command="/opt/horeca/bin/deploy.sh",restrict ssh-ed25519 AAAA… horeca-ci-deploy`.
+5. Nginx: map → `conf.d`, site → `sites-available` (fill in the two Tailscale IPs) + symlink in `sites-enabled`; `htpasswd -c -B /etc/nginx/htpasswd/horeca-staging <user>` (root:www-data, 640). Because the site listens on the Tailscale IP, Nginx must be able to start before `tailscaled` is up: `net.ipv4.ip_nonlocal_bind = 1` in `/etc/sysctl.d/`. `nginx -t && systemctl reload nginx`.
+6. Backups: `/var/backups/horeca` owned by `deploy`; `deploy/cron.example` → `/etc/cron.d/horeca-backup` (production line stays commented until D5-A1).
+
 ## Server & infrastructure
 | Environment | Where | Data |
 |---|---|---|
 | Local | Developer machines; services in Docker, app via `pnpm dev` | Seed |
 | CI | GitHub runners, Testcontainers | Throw-away |
-| Staging | Server, Compose project `horeca-staging`, behind basic auth | Seed, resettable (`deploy.sh staging --reset`) |
-| Production | Server, Compose project `horeca-prod` | Real |
+| Staging | Server, Compose project `horeca-staging`, behind basic auth | Seed, resettable (`deploy.sh staging-reset <sha>`) |
+| Production | Server, Compose project `horeca-production` | Real |
 
 - **Isolation:** staging and production have separate Compose projects, networks, volumes, `.env` files and media volumes, plus `mem_limit` on every container. Each runs web, worker, mock-services, Postgres (with the job queue), Meilisearch and Mailpit. Our Nginx routes `/gateway/` to `mock-services`; the gateway's admin page is behind basic auth in every environment. The Mailpit UI is served by our Nginx at `/_mail/` behind basic auth (shown on screen in the demo — no SSH tunnel needed).
 - **Domains & traffic:** `horeca.bogdandelic.online` (production) and `staging.horeca.bogdandelic.online` — A records at Namecheap pointing to the friend's public server, which terminates TLS (certbot) and forwards over **Tailscale** to our server. It must pass `X-Forwarded-For`, `X-Forwarded-Proto: https` and the host, allow ≈ 20 MB uploads and slightly longer timeouts.
@@ -298,7 +340,7 @@ flowchart LR
 - **Health:** Docker healthchecks; `/api/health` = Postgres + migration version (gates deploys); Meilisearch, Mailpit and the worker reported as degraded (worker: oldest waiting pg-boss job older than 5 min).
 - **Backups:** nightly `pg_dump` of production plus one before every production deploy, and a nightly archive of the production **media volume**, stored on the server; keep 7 nightly + 5 pre-deploy dumps. A restore of a pre-deploy dump into a scratch container is tested once (D5); restored waiting jobs run again, which is harmless with Mailpit. Meilisearch is rebuilt with `pnpm search:reindex`; staging is not backed up.
 - **Database logins:** three roles per environment, created by the Postgres init script — `horeca_owner` (non-superuser owner, migrations), `horeca_app` (web), `horeca_worker` (worker); passwords in the server's `.env` files, never in Git.
-- **Secrets:** runtime secrets in `.env.staging` / `.env.production` on the server (mode `600`, owned by `deploy`); CI secrets (SSH key, GHCR token if the image package is private) in GitHub Environments, next to the non-sensitive Tailscale federated-identity values `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` (there is no Tailscale client secret).
+- **Secrets:** runtime secrets in `/opt/horeca/staging/.env` / `/opt/horeca/production/.env` on the server (mode `600`, owned by `deploy`); CI secrets (SSH key, GHCR token if the image package is private) in GitHub Environments, next to the non-sensitive Tailscale federated-identity values `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` (there is no Tailscale client secret).
 - **Monitoring:** pino JSON logs with Docker log rotation; `/api/health`. (Sentry, an uptime monitor and an admin Jobs page are on the "after the project" list.)
 - **Images:** `deploy.sh` prunes old images, keeping the last five SHAs.
 - **E-mail:** SMTP to Mailpit in every environment — demo e-mails never leave the server; no provider, no SPF/DKIM.
