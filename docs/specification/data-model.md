@@ -111,7 +111,7 @@ messages are Montenegrin (decision 012 §10) and come from message catalogues, n
 | 0000 | extension `ltree` only | D2-B1 | ✅ merged |
 | 0001 | Better Auth tables, `org_profiles`, `supplier_profiles`, `buyer_locations` + grants | D2-B2 | ✅ merged |
 | 0002 | health-check grants (Member A) | D2-A4 | ✅ merged |
-| 0003 | catalogue tables + grants; category / attribute seed | D3-B2 | planned (25.11) |
+| 0003 | catalogue tables + grants (the category / attribute seed is `src/server/db/seed/`) | D3-B2 | ✅ done 25.11 |
 | 0004 | order core with the 012 edits (`mode`, `supplier_submission`, `commission_payment`, …) | D4-B1 | planned (26.11) |
 | 0005 | RLS: policies, guard triggers, helper functions — with `rls_tests.sql` run by `psql` in CI | D4-B2 | planned (26.11) |
 | 0006 | contracts, payments, payment events, product stock, `app.system_cancel_sub_order()` — **ERD frozen** | D5-B0 | planned (27.11) |
