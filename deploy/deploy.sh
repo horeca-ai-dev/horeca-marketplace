@@ -52,6 +52,12 @@ readonly env_file="$env_dir/.env"
 [[ -r $env_file ]] || refuse "missing $env_file"
 [[ -r $DEPLOY_DIR/compose.yml ]] || refuse "missing $DEPLOY_DIR/compose.yml"
 
+# The web port for the health check: WEB_PORT from the same .env that compose.yml publishes it from
+# (127.0.0.1:${WEB_PORT}:3000), so the two can never disagree. Read as text — the .env is never
+# sourced (it would run as shell). The last assignment wins, like in Compose; quotes are allowed.
+web_port="$(sed -n -E 's/^[[:space:]]*WEB_PORT[[:space:]]*=[[:space:]]*["'\'']?([0-9]+)["'\'']?[[:space:]]*$/\1/p' "$env_file" | tail -n 1)"
+[[ $web_port =~ ^[0-9]{2,5}$ ]] || refuse "WEB_PORT missing or not a number in $env_file"
+
 # ── 2. One deploy per environment at a time; everything below goes to the log too ───────────────
 exec 9>"$env_dir/deploy.lock"
 flock --wait 600 9 || refuse "another $env deploy is still running"
@@ -94,8 +100,7 @@ fi
 compose up --detach --remove-orphans web worker
 
 # ── 7. Health gate: 200 = Postgres + migration version OK ("degraded" still passes) ─────────────
-web_addr="$(compose port web 3000)" # e.g. 127.0.0.1:3001 — the port comes from .env, not from here
-health_url="http://$web_addr/api/health"
+health_url="http://127.0.0.1:$web_port/api/health" # staging: WEB_PORT=3101
 log "waiting for $health_url (max ${HEALTH_TIMEOUT_S}s)"
 deadline=$((SECONDS + HEALTH_TIMEOUT_S))
 until body="$(curl --fail --silent --show-error --max-time 5 "$health_url" 2>/dev/null)"; do

@@ -6,8 +6,9 @@
 # the server does NOT pull them from Git, so they can drift (checked by hand in the PR checklist).
 #
 # Run it only through deploy.sh, which sets the project, env file and IMAGE_TAG:
-#   staging     project horeca-staging      web 127.0.0.1:3001   Mailpit UI 127.0.0.1:8026
-#   production  project horeca-production   web 127.0.0.1:3000   Mailpit UI 127.0.0.1:8027   (D5-A1)
+#   staging     project horeca-staging      web 127.0.0.1:3101   Mailpit UI 127.0.0.1:8126
+#   production  project horeca-production   web 127.0.0.1:3102   Mailpit UI 127.0.0.1:8127   (D5-A1)
+#   (host ports = WEB_PORT / MAILPIT_UI_PORT in .env; both sites sit behind our Nginx on :8081)
 #
 # Rules (CLAUDE.md → Infrastructure): every ports entry starts with 127.0.0.1; Postgres and Meilisearch
 # have no ports; mem_limit and log rotation on every container; each container gets ONLY the variables
