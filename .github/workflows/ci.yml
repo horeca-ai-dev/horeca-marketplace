@@ -7,8 +7,10 @@
 # Every action is pinned to a full commit SHA (the tag is in the comment) and was at least two weeks
 # old when chosen; Node and pnpm versions come from .nvmrc and package.json "packageManager".
 #
-# Later: Testcontainers replaces the Compose services for integration tests (D3-B1); the RLS SQL
-# tests run with psql against the real migrations (D4-B2).
+# Integration tests start their own Postgres with Testcontainers (tests/integration/global-setup.ts: same
+# image and init script as Compose, then the migrate entry); Compose still provides Mailpit for the
+# e-mail test and the empty-database migrate step. The RLS SQL tests run with psql against the real
+# migrations (D4-B2).
 name: CI
 
 on:
@@ -103,7 +105,8 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # Same services and the same init script (three logins) as on our laptops.
+      # Same services and the same init script (three logins) as on our laptops. The integration tests
+      # below do not use this Postgres — Testcontainers starts a fresh one — but Mailpit is needed.
       - name: Start Postgres and Mailpit
         run: |
           cp .env.example .env
