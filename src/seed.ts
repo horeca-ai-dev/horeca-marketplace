@@ -9,6 +9,9 @@
 import { assertEnv, env } from "@/env.core";
 import { closeDb } from "@/server/db/client";
 import { runSeed } from "@/server/db/seed/run";
+import { getLogger } from "@/server/logger";
+
+const log = getLogger("seed");
 
 async function main() {
   assertEnv("seed");
@@ -16,15 +19,13 @@ async function main() {
     appEnv: env.APP_ENV,
     password: env.SEED_DEMO_PASSWORD,
   });
-  console.log(
-    `[seed] done — categories +${result.categoriesInserted}, attributes +${result.attributesInserted}, ` +
-      `users +${result.usersCreated}, organizations +${result.organizationsCreated}`,
-  );
+  // What was ADDED this run — all zeros on a repeat.
+  log.info(result, "seed done");
 }
 
 main()
   .catch((err: unknown) => {
-    console.error("[seed] failed:", err instanceof Error ? err.message : err);
+    log.fatal({ err }, "seed failed");
     process.exitCode = 1;
   })
   .finally(() => closeDb());

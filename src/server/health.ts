@@ -10,12 +10,14 @@
  */
 import { connect } from "node:net";
 import { env } from "@/env.core";
+import { getLogger } from "@/server/logger";
 import {
   migrationState,
   oldestWaitingJobAgeSeconds,
   type MigrationState,
 } from "@/server/db/queries/health";
 
+const log = getLogger("health");
 const TIMEOUT_MS = 2_000;
 /** The worker counts as degraded when a due job has waited longer than this (CLAUDE.md "Health"). */
 export const WORKER_STALE_SECONDS = 5 * 60;
@@ -54,11 +56,7 @@ async function withTimeout<T>(
 }
 
 function logFailure(check: string, err: unknown) {
-  // pino arrives with D3-B3.
-  console.error(
-    `[health] ${check}:`,
-    err instanceof Error ? err.message : String(err),
-  );
+  log.error({ err, check }, "health check failed");
 }
 
 async function checkDatabase(): Promise<

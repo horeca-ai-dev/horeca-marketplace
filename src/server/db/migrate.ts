@@ -17,6 +17,9 @@ import { env } from "@/env.core";
 import { createOwnerBoss } from "@/server/jobs/boss";
 import { pgbossGrantsSql } from "@/server/jobs/pgboss-grants";
 import { QUEUE_NAMES } from "@/server/jobs/queues";
+import { getLogger } from "@/server/logger";
+
+const log = getLogger("migrate");
 
 export async function runMigrations(): Promise<void> {
   const pool = new Pool({
@@ -27,25 +30,23 @@ export async function runMigrations(): Promise<void> {
   try {
     // 1.
     await migrate(drizzle(pool), { migrationsFolder: env.MIGRATIONS_DIR });
-    console.log("[migrate] database migrations applied");
+    log.info("database migrations applied");
 
     // 2. start() with migrate: true creates or upgrades the pgboss schema, then we stop again —
     //    this process never works on jobs.
     const boss = createOwnerBoss();
-    boss.on("error", (err) => console.error("[migrate] pg-boss:", err.message));
+    boss.on("error", (err) => log.error({ err }, "pg-boss error"));
     await boss.start();
     try {
       for (const name of QUEUE_NAMES) await boss.createQueue(name);
     } finally {
       await boss.stop({ graceful: false });
     }
-    console.log(
-      `[migrate] pg-boss schema ready, queues: ${QUEUE_NAMES.join(", ")}`,
-    );
+    log.info({ queues: [...QUEUE_NAMES] }, "pg-boss schema ready");
 
     // 3.
     await pool.query(pgbossGrantsSql);
-    console.log("[migrate] pg-boss grants applied");
+    log.info("pg-boss grants applied");
   } finally {
     await pool.end();
   }
