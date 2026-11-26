@@ -81,8 +81,6 @@ export const PERMISSIONS = {
   "subOrder.deliver": supplierSide,
   "subOrder.cancel": everyone,
   "invoice.download": { buyer: "any", platform: "any" },
-  "payment.recordReceipt": platformOnly,
-  "payment.recordRefund": platformOnly,
   "ledger.view": { supplier: "owner", platform: "any" },
   "ledger.recordPayout": platformOnly,
   "ledger.recordAdjustment": platformOnly,

@@ -35,6 +35,10 @@ const NOT_IN_CODE: Record<string, string> = {
     "decision 012: the admin creates suppliers as `approved`; the approval queue is gone",
   "supplier.reject": "decision 012: the approval queue is gone",
   "supplier.reapply": "decision 012: re-apply after rejection is gone",
+  "payment.recordReceipt":
+    "decision 012 §4: no manual 'record buyer payment'; the worker inserts receipts from signed gateway events",
+  "payment.recordRefund":
+    "decision 012 §4: the worker inserts refunds from signed gateway events",
 };
 
 /** In `PERMISSIONS` but not in the document. */
