@@ -3,7 +3,8 @@
 #   build           buildx (GitHub Actions cache) → ghcr.io/horeca-ai-dev/horeca-marketplace:<sha>
 #   deploy-staging  Environment "staging": join the tailnet (Tailscale federated identity, no secret)
 #                   → ssh deploy@server "staging <sha>" (the key is forced to run deploy.sh)
-#                   → scripts/smoke-g0.sh through both proxies
+#   smoke-staging   fresh runner, NOT on the tailnet → scripts/smoke-g0.sh via public DNS, so it
+#                   tests the real public path through both proxies
 #   production      TODO(D5-A1)
 #
 # The PR's CI (ci.yml) has already passed before anything reaches main. Every action is pinned to a
@@ -104,16 +105,35 @@ jobs:
             -o ConnectTimeout=20 \
             "deploy@${DEPLOY_HOST}" "staging ${SHA}"
 
+      - name: Remove the SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts_deploy
+
+  smoke-staging:
+    name: smoke test staging
+    needs: deploy-staging
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # A fresh runner that never joins the tailnet: it resolves the domain through public DNS and
+    # reaches the app the way a user does (friend's proxy → Tailscale → our Nginx → app).
+    # The Environment is only for the basic-auth secrets. No concurrency group: a smoke run may
+    # overlap the next deploy and then tests whatever is live; the next run checks again.
+    environment:
+      name: staging
+      url: https://staging.horeca.bogdandelic.online
+    permissions:
+      contents: read # no id-token: this job never joins the tailnet
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: G0 smoke test (through both proxies)
         env:
           SMOKE_BASE_URL: https://staging.horeca.bogdandelic.online
           SMOKE_BASIC_AUTH_USER: ${{ secrets.STAGING_BASIC_AUTH_USER }}
           SMOKE_BASIC_AUTH_PASS: ${{ secrets.STAGING_BASIC_AUTH_PASS }}
         run: scripts/smoke-g0.sh
-
-      - name: Remove the SSH key
-        if: always()
-        run: rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts_deploy
 
   # TODO(D5-A1): production half —
   #   deploy-production:
