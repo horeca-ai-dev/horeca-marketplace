@@ -14,7 +14,7 @@ The rules below are written to be **checked**: a reviewer can answer each with y
 2. **One green.** `--primary` is the only brand colour. A view contains **at most one solid green button**. No second accent colour.
 3. **A badge never looks clickable.** Solid fills are for buttons only; statuses are a soft tint with a dot and a text label.
 4. **Status is never colour-only** — every badge has a text label; stock and status are readable in greyscale.
-5. **Trust in numbers** — prices always show the currency; net / VAT / total is explicit; money is right-aligned in tabular figures.
+5. **Trust in numbers** — prices always show the currency; net / VAT / total is explicit; amounts that stack in a column are right-aligned in tabular figures.
 6. **Every screen has four states** — loading (skeleton), empty (with the next step), error, populated.
 7. **Always show who you are acting as** — the active organization is visible on every authenticated screen.
 8. **Labels say what the thing does.** No marketing filler, no decoration that carries no information.
@@ -80,9 +80,9 @@ Only these pairs are allowed. Text minimum **4.5:1** (also for large text); cont
 Staging shows a thin full-width banner at the top in the attention tone: "STAGING — testni podaci". The environment name comes from runtime config passed by a Server Component (never a `NEXT_PUBLIC_*` variable). Production shows nothing.
 
 ## Typography
-- **One grotesque sans family for everything** — UI, tables, e-mails, invoice PDF. Candidates: **Schibsted Grotesk** and **Hanken Grotesk**; *the choice is made by looking at `/dev/style` and recorded here.*
-- **Verified against the font files (26.11.2026):** both contain **č ć š ž đ / Č Ć Š Ž Đ** (`latin-ext`) and **€** (`latin`). Schibsted: digits proportional by default, `tnum` feature makes them equal width (1300 / 2048 units at weights 400–700 — visibly wide). Hanken: no `tnum` feature, but all digits are 560 / 1000 units at weights 400–700, so columns align either way.
-- **Loading:** the chosen font is **committed as local files** (variable woff2, `latin` + `latin-ext`, with its **OFL licence file**) under `src/app/fonts/` and loaded with **`next/font/local`** in the root layout (task D4-A1), exposed as `--font-app`. Builds never download fonts; the same files are embedded in the invoice PDF. (`/dev/style` alone uses `next/font/google` for the two candidates and is cleaned up in D4-A1.) Fallback: system-ui, Segoe UI, Arial.
+- **One grotesque sans family for everything: Schibsted Grotesk** (SIL Open Font License) — UI, tables, e-mails, invoice PDF. Chosen on 26.11.2026 on `/dev/style` over Hanken Grotesk.
+- **Verified against the font files (26.11.2026):** contains **č ć š ž đ / Č Ć Š Ž Đ** (`latin-ext`) and **€** (`latin`); weight axis 400–900. Its digits are **proportional by default**; the `tnum` feature (`tabular-nums`) makes them equal width (1300 / 2048 units at weights 400–700) — noticeably wider, which is why tabular figures are limited to columns (rule below).
+- **Loading:** the font is **committed as local files** (variable woff2, `latin` + `latin-ext`, with its **OFL licence file**) under `src/app/fonts/` and loaded with **`next/font/local`** in the root layout (task D4-A1), exposed as `--font-app`. Builds never download fonts; the same files are embedded in the invoice PDF. (Until D4-A1, `/dev/style` alone loads it with `next/font/google`, next to the rejected candidate for comparison.) Fallback: system-ui, Segoe UI, Arial.
 - **Scale — six steps, nothing else** (px size / line height):
 
   | Step | Size | Weight | Utility |
@@ -95,7 +95,10 @@ Staging shows a thin full-width banner at the top in the attention tone: "STAGIN
   | Caption | 12 / 16 | 400 | `text-xs` |
 - **Three weights:** 400 regular, 500 medium (labels, table headers, badges), 600 semibold (headings, buttons, totals). No 700+.
 - **Hierarchy from size and weight only.** Headings are upright, semibold, `--foreground`. No italics, no serif, no coloured or gradient headings, no uppercase letter-spaced labels, no letter-spacing changes at all.
-- **Money, quantities, dates, order numbers:** `tabular-nums`, always (the `MoneyText` component applies it). Amounts in tables are right-aligned.
+- **Figures — two rules, no third case:**
+  - **Tabular (`tabular-nums`) only where values stack in a column:** amount, quantity, date and number columns of tables (orders, sub-orders, ledger, import report), cart and checkout line amounts and totals, the invoice. These amounts are right-aligned.
+  - **Proportional (the font's default) everywhere else:** catalogue tiles, the product page price, prices and numbers inside a sentence, badges, headings, the quantity stepper, the ledger balance sentence.
+  - `MoneyText` is proportional by default and takes a `tabular` prop; `DataTable` amount columns and the cart / checkout summary set it. Nobody writes `tabular-nums` by hand outside those components.
 - Max prose line length ≈ 70 characters.
 
 ## Spacing, shape, borders, shadows, motion
@@ -116,9 +119,9 @@ Staging shows a thin full-width banner at the top in the attention tone: "STAGIN
 
 ### Shopping mode (buyer: catalogue, product page, cart drawer)
 - **Catalogue:** a grid of image tiles, **2 / 3 / 4 columns** at `sm` / `md` / `xl` (1 column below 360). All state (query, filters, sort, page) in the URL.
-- **Tile** (`ProductCard`): a **square** image on `--well` (photo `object-fit: contain`, so uneven supplier images look uniform) · name (max 2 lines) · supplier · stock badge · price with "bez PDV-a" · **add button**. The add button is **secondary** (a grid holds many — the solid green button is reserved) and **turns into a quantity stepper** once tapped; at quantity 0 it turns back. Out of stock / availability unknown → the button is disabled and the badge says why.
+- **Tile** (`ProductCard`): a **square** image on `--well` (photo `object-fit: contain`, so uneven supplier images look uniform) · name (max 2 lines) · supplier · stock badge · price with "bez PDV-a" (proportional figures) · **add button**. The add button is **secondary** (a grid holds many — the solid green button is reserved) and **turns into a quantity stepper** once tapped; at quantity 0 it turns back. Out of stock / availability unknown → the button is disabled and the badge says why.
 - **Filters:** a left rail from `lg`; below it a **bottom sheet** opened by a "Filteri" button. **Active filters are removable chips above the grid**, with "Poništite sve". Facet counts next to values.
-- **Product page:** gallery on the left half; **price, stock, quantity and the add button pinned on the right** (sticky while the left side scrolls); attributes below as a **two-column specification list** (label left, value right, 1 px rows). On mobile: gallery, then the buy block, then the specification; the add button stays in a bar fixed to the bottom.
+- **Product page:** gallery on the left half; **price (proportional figures), stock, quantity and the add button pinned on the right** (sticky while the left side scrolls); attributes below as a **two-column specification list** (label left, value right, 1 px rows). On mobile: gallery, then the buy block, then the specification; the add button stays in a bar fixed to the bottom.
 - **Cart drawer:** adding an item slides in a drawer from the right (200 ms), **already grouped by supplier** with each group's sub-total, so the buyer keeps browsing. It is the one place in shopping mode with a solid green button ("Pregledajte korpu"). Full-screen on mobile.
 
 ### Operations mode (orders, contracts, invoices, ledger; all supplier and admin screens)
@@ -126,7 +129,7 @@ Staging shows a thin full-width banner at the top in the attention tone: "STAGIN
 - **Row → side panel:** clicking a row (or Enter on it) opens the detail in a panel on the right (≈ 480 px, floating shadow), the selected row gets `--selected`, **the list stays in view**. Esc closes it and returns focus to the row. The panel's state is in the URL.
 - **One visible action per row** (a text button), the rest in a "⋯" menu with an accessible name.
 - **Purchase mode per supplier group** (`CartSupplierGroup`): **radio options that state the consequence in plain words** — title + one sentence saying what happens to the money. If direct is unavailable the option stays visible, disabled, **says why**, and offers **"Zatražite ugovor"** in the same place; while a request is pending it shows the request's status instead.
-- **Checkout summary:** the total is **split into "Naplaćujemo sa Vaše kartice sada" and "Fakturišu Vam dobavljači"**, each with its amount, above the grand total. The one solid green button: "Potvrdite porudžbinu".
+- **Checkout summary:** the total is **split into "Naplaćujemo sa Vaše kartice sada" and "Fakturišu Vam dobavljači"**, each with its amount, above the grand total; the amounts form one right-aligned tabular column. The one solid green button: "Potvrdite porudžbinu".
 - **Invoice:** a **paper-like preview** (white sheet with a 1 px border on `--surface`, A4 proportions) and **one download button**.
 - **Ledger:** the balance is stated **in words** — "Platforma Vam duguje 1.234,56 €" / "Dugujete platformi 1.234,56 €" (admin view: "Platforma duguje dobavljaču" / "Dobavljač duguje platformi"), never only + / −. Entry rows have a type label and a signed, right-aligned amount.
 - **Empty states:** every table has a designed empty state — one sentence saying what will appear here and **one action that is the next step** (e.g. no orders → "Otvorite katalog").
@@ -164,7 +167,7 @@ The side panel becomes a **full-screen sheet**; tables collapse to **stacked row
 | Button | **primary** (solid green — at most one per view) / **secondary** (white, `--input` border) / **ghost** (green text, no border) / **destructive** (solid red, only inside a confirmation); 40 px (44 touch), 14 px semibold; pending state disables + spinner + a changed label ("Šaljemo…"); hover changes colour only |
 | Input, Select, Textarea | label above (never placeholder-only), `--input` border, help text, inline error with icon + text in `--negative-text`, `aria-describedby`; wired through React Hook Form + Zod |
 | **OrgBadge / OrgSwitcher** | type label + icon + company name, no type colour; current org always visible |
-| **MoneyText** | formats `1.234,56 €`; `tabular-nums`; right-aligned in tables; "neto" / "PDV" / "ukupno" labels when ambiguous; formatting only — never calculates |
+| **MoneyText** | formats `1.234,56 €`; proportional figures by default, `tabular` prop (tabular figures, right-aligned) for amount columns and totals; "neto" / "PDV" / "ukupno" labels when ambiguous; formatting only — never calculates |
 | **StatusBadge** | from the badge table; one component for every status in every area |
 | DataTable (TanStack Table) | densities `comfortable` / `compact`; sticky header; sortable columns; row click → side panel; one visible action + menu; pagination; designed empty state; skeleton rows of the same height; stacked rows on mobile; `scope` attributes; sort / page / filter / open row in the URL |
 | **SidePanel** | detail of the selected row; floating; Esc closes, focus returns; full-screen sheet on mobile |
