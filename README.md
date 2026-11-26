@@ -173,7 +173,7 @@ Config: `deploy/garage/garage.toml` (no secrets — Garage reads `GARAGE_RPC_SEC
 | One company, two organizations (buyer + supplier) | `multi@demo.local` | `Demo-1234!` |
 
 ## Scripts
-`pnpm dev` · `pnpm worker:dev` · `pnpm build` · `pnpm build:entries` (bundles worker, migrate and seed into `dist/`) · `pnpm start` · `pnpm lint` · `pnpm typecheck` (`next typegen` + `tsc --noEmit`) · `pnpm format` · `pnpm format:check` · `pnpm test` · `pnpm test:integration` · `pnpm test:e2e` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:reset` · `pnpm search:reindex` · `scripts/smoke-g0.sh` (G0 smoke test; env `SMOKE_BASE_URL`, `SMOKE_BASIC_AUTH_USER`/`_PASS`)
+`pnpm dev` · `pnpm worker:dev` · `pnpm build` · `pnpm build:entries` (bundles worker, migrate and seed into `dist/`) · `pnpm start` · `pnpm lint` · `pnpm typecheck` (`next typegen` + `tsc --noEmit`) · `pnpm format` · `pnpm format:check` · `pnpm test` · `pnpm test:integration` · `pnpm test:rls` (RLS tests with psql on a throwaway database; needs the Compose Postgres) · `pnpm test:e2e` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:reset` · `pnpm search:reindex` · `scripts/smoke-g0.sh` (G0 smoke test; env `SMOKE_BASE_URL`, `SMOKE_BASIC_AUTH_USER`/`_PASS`)
 
 ## Project structure
 ```

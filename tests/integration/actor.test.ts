@@ -1,7 +1,7 @@
 /**
  * loadActor() — the membership re-check of CLAUDE.md rule 3 — against a real database (D2-B3).
  * The buyer comes from the real registration (D2-B2). Registration is buyer-only (decision 012), so the
- * supplier is inserted directly here, the way the admin flow (D5-B1) will create it.
+ * supplier is inserted directly here, in the platform's RLS context, the way the admin flow (D5-B1) will create it.
  */
 import { generateId } from "@better-auth/core/utils/id";
 import { randomInt } from "node:crypto";
@@ -63,10 +63,11 @@ async function createSupplier(label: string) {
       role: "owner",
       createdAt: now,
     });
+    // RLS (D4-B2): only the platform inserts supplier profiles, so act as the admin does in D5-B1.
     await setRlsContext(tx, {
       userId: user.id,
-      orgId: organizationId,
-      orgType: "supplier",
+      orgId: `platform-${run}`,
+      orgType: "platform",
       role: "owner",
     });
     await tx.insert(orgProfiles).values({
