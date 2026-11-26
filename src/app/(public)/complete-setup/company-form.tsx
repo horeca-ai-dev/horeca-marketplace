@@ -4,6 +4,11 @@
  * "Complete company setup" form (D4-A3): the company part only, for a logged-in user without an
  * organization. Same schema (companySchema) and same server transaction as registration, through
  * completeCompanySetupAction.
+ *
+ * If the register form left a company draft in sessionStorage (registration stopped after the
+ * account was created), the form starts pre-filled from it and says so. The draft is read in the
+ * browser after the page has loaded (the server cannot see sessionStorage), validated by the shared
+ * schema, and deleted once the company exists.
  */
 import { useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,6 +20,12 @@ import {
   useErrorSummary,
 } from "@/components/domain/form/error-summary";
 import { SubmitButton } from "@/components/domain/form/submit-button";
+import {
+  browserDraftStorage,
+  clearCompanyDraft,
+  loadCompanyDraft,
+  saveCompanyDraft,
+} from "@/lib/auth/company-draft";
 import { areaFor } from "@/lib/auth/destination";
 import {
   COMPANY_FIELDS,
@@ -33,8 +44,19 @@ import { CompanyFields } from "../register/company-fields";
 /** What the inputs hold (before Zod trims and turns "" into undefined). */
 type FormValues = z.input<typeof companySchema>;
 
+const EMPTY: FormValues = {
+  legalName: "",
+  taxId: "",
+  addressLine: "",
+  city: "",
+  postalCode: "",
+  contactEmail: "",
+  contactPhone: "",
+};
+
 export function CompanyForm() {
   const t = useTranslations();
+  const [prefilled, setPrefilled] = useState(false);
   const {
     register,
     handleSubmit,
@@ -46,14 +68,12 @@ export function CompanyForm() {
     mode: "onBlur",
     // Focus goes to the error summary instead of the first invalid field.
     shouldFocusError: false,
-    defaultValues: {
-      legalName: "",
-      taxId: "",
-      addressLine: "",
-      city: "",
-      postalCode: "",
-      contactEmail: "",
-      contactPhone: "",
+    // A function: React Hook Form calls it in the browser after the first render, then fills the
+    // inputs — so the server-rendered (empty) form and the browser's first render are identical.
+    defaultValues: async () => {
+      const draft = loadCompanyDraft(browserDraftStorage());
+      if (draft) setPrefilled(true);
+      return draft ?? EMPTY;
     },
   });
   const { focusRequest, focus: focusSummary } = useErrorSummary();
@@ -85,6 +105,7 @@ export function CompanyForm() {
     );
 
     if (result?.data) {
+      clearCompanyDraft(browserDraftStorage());
       setRedirecting(true);
       loadPage(areaFor(result.data.type));
       return;
@@ -107,6 +128,7 @@ export function CompanyForm() {
         return;
       case "UNAUTHENTICATED":
         // The session ended: log in again, then come back here.
+        saveCompanyDraft(browserDraftStorage(), getValues());
         setRedirecting(true);
         loadPage("/login?notice=account-created");
         return;
@@ -135,6 +157,14 @@ export function CompanyForm() {
       }
       className="flex flex-col gap-4"
     >
+      {prefilled ? (
+        <p
+          role="status"
+          className="rounded-md bg-attention-bg p-3 text-sm text-attention-text"
+        >
+          {t("auth.completeSetup.prefilled")}
+        </p>
+      ) : null}
       <ErrorSummary
         focusRequest={focusRequest}
         title={t("auth.errors.summaryTitle")}

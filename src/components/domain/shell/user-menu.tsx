@@ -21,6 +21,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Icon } from "@/components/ui/icon";
 import { authClient } from "@/lib/auth-client";
+import {
+  browserDraftStorage,
+  clearCompanyDraft,
+} from "@/lib/auth/company-draft";
 import { type Area, AREAS } from "./nav";
 
 type Status = "idle" | "pending" | "failed";
@@ -31,6 +35,9 @@ export function UserMenu({ area }: { area: Area }) {
 
   async function signOut() {
     setStatus("pending");
+    // A half-finished registration may have left company data in this tab (company-draft.ts):
+    // it must not outlive the session, whether or not the sign-out request succeeds.
+    clearCompanyDraft(browserDraftStorage());
     const { error } = await authClient.signOut().catch(() => ({ error: true }));
     if (error) {
       setStatus("failed");

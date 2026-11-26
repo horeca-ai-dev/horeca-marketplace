@@ -74,6 +74,7 @@
     "completeSetup": {
       "title": "Završite podešavanje firme",
       "description": "Vaš nalog još nije povezan sa firmom. Unesite podatke o firmi da biste nastavili.",
+      "prefilled": "Popunili smo podatke koje ste ranije unijeli.",
       "submit": "Sačuvajte firmu",
       "submitting": "Čuvamo podatke…"
     },
