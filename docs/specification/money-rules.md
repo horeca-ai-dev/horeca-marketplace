@@ -1,6 +1,6 @@
 # Money rules (Specification §3.2 / §6.3)
 
-*Member B · task D3-AB1 · state: 25.11.2026, after decision 012.*
+*Member B · task D3-AB1 · state: 26.11.2026, after decision 012; ledger and payment-status rules implemented in `money.ts` (D4-B1).*
 The rules, 10 worked examples and test vectors are in
 [`docs/decisions-9-11/money-rules.md`](../decisions-9-11/money-rules.md) and
 [`money-vectors.json`](../decisions-9-11/money-vectors.json) (unit-test vectors for `src/server/domain/money.ts`).
@@ -88,9 +88,10 @@ currency are checked) — the manual "record buyer payment" screen no longer exi
 **Shipping waits for payment (mentor answer M2):** `subOrder.ship` requires `paid` for a platform sub-order;
 confirming earlier is allowed; direct sub-orders do not wait.
 
-> **Open detail for D4-B1:** if the order *has* platform sub-orders but **all of them are cancelled**, the rule
-> above gives `unpaid` (or `paid`/`refund_due` if money moved). `APPLIED.md` only says `not_applicable` for "no
-> platform sub-order". I will decide this in D4-B1 and record it in `APPLIED.md`.
+> **Decided in D4-B1 (26.11, in `APPLIED.md`):** if the order *has* platform sub-orders but **all of them are
+> cancelled**, nothing is due, so the status is `not_applicable` — unless money was paid, which makes it `refund_due`
+> (that check comes first). The same rule is written twice, in `paymentStatus()` (`money.ts`) and in
+> `app.recompute_order()` (migration 0005), and each copy is tested on the same cases (unit tests, `rls_tests.sql`).
 
 ## 5. ⟶ 012: pro-forma invoice
 One per order, issued by the platform, **only for the platform part** — its totals are the platform sub-orders'

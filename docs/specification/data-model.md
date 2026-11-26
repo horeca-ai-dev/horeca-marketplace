@@ -1,12 +1,14 @@
 # Data model (Specification §6)
 
-*Member B · task D3-AB1 · state: 25.11.2026, after decision 012.*
+*Member B · task D3-AB1 · state: 26.11.2026, after migrations 0004–0005 and decision 012.*
 This document **summarises and links** — the full column lists live in the sources below and are not copied.
 
 | Source | What it holds |
 |---|---|
 | [`docs/decisions-9-11/schema/*.ts`](../decisions-9-11/schema/) | Drizzle drafts of every table (columns, constraints, indexes, who owns the rows) |
-| [`docs/decisions-9-11/schema/rls.sql`](../decisions-9-11/schema/rls.sql) | database roles, row-level-security policies, guard triggers, `SECURITY DEFINER` helpers |
+| [`src/server/db/migrations/0005_rls.sql`](../../src/server/db/migrations/0005_rls.sql) | **implemented** (26.11): row-level-security policies, guard triggers, `SECURITY DEFINER` functions; tested by `pnpm test:rls` (114 checks, also in CI). Database roles: [`deploy/postgres/init/01-roles.sh`](../../deploy/postgres/init/01-roles.sh) |
+| [`docs/decisions-9-11/schema/rls.sql`](../decisions-9-11/schema/rls.sql) | the draft that 0005 was written from (kept for the reasoning; `APPLIED.md` lists every edit) |
+| [`docs/decisions/014-rls-owner-escape-hatch.md`](../decisions/014-rls-owner-escape-hatch.md) | why the owner login bypasses RLS and how that is contained |
 | [`docs/decisions-9-11/APPLIED.md`](../decisions-9-11/APPLIED.md) | **what changed after the drafts** (review, decisions A–J, decision 012) — where it disagrees with the drafts, it wins |
 | [`docs/decisions/012-purchase-modes-payments-stock.md`](../decisions/012-purchase-modes-payments-stock.md) | purchase modes, contracts, payments, stock — wins over everything older |
 | `src/server/db/schema/` + `src/server/db/migrations/` | what is **implemented** so far (see "Migration plan" below) |
@@ -20,10 +22,10 @@ is a one-column comparison and a supplier never reads the buyer's `orders` row (
 | Diagram | Status |
 |---|---|
 | [`01-erd-complete`](../diagrams/01-erd-complete.png) — all tables | Pre-012. Needs `sub_orders.mode`, `supplier_submission`, `commission_payment`, `supplier_agreements`, `payments`, `payment_events`, `product_stock`; no `payment_method`, no `invoice_counters`, no `thumb_key`. Refreshed in D14-B3 |
-| [`08-erd-catalogue`](../diagrams/08-erd-catalogue.mmd), [`09-erd-orders`](../diagrams/09-erd-orders.mmd), [`11-state-suborder`](../diagrams/11-state-suborder.mmd), [`12-checkout-sequence`](../diagrams/12-checkout-sequence.mmd) | Updated in D4-B4 before this specification is submitted |
+| [`08-erd-catalogue`](../diagrams/08-erd-catalogue.mmd), [`09-erd-orders`](../diagrams/09-erd-orders.mmd), [`11-state-suborder`](../diagrams/11-state-suborder.mmd), [`12-checkout-sequence`](../diagrams/12-checkout-sequence.mmd) | **Updated 26.11 (D4-B4):** the `.mmd` sources match migrations 0003–0005 and decision 012. The PNG renderings of these four are re-rendered separately |
 
-> **Honest note:** until D4-B4 and D14-B3 are merged, the PNG diagrams and the text below can disagree. The
-> text of this file and `APPLIED.md` are right; the pictures are the thing that lags.
+> **Honest note:** until the PNGs are re-rendered and `01-erd-complete` is refreshed (D14-B3), a picture and the text
+> below can disagree. The text of this file, the `.mmd` sources and `APPLIED.md` are right; the pictures lag.
 
 ## 6.2 Entity descriptions
 
