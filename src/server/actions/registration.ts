@@ -32,7 +32,9 @@ export const completeCompanySetupAction = actionClient
     const state = await resolveSession();
     if (state.kind === "anonymous") throw new Unauthenticated();
     if (state.kind === "actor")
-      throw new Conflict("This account already belongs to a company.");
+      throw new Conflict("This account already belongs to a company.", {
+        reason: "ALREADY_HAS_COMPANY",
+      });
     const { type, status } = await completeCompanySetup(
       state.userId,
       await headers(),

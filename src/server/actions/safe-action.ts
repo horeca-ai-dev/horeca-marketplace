@@ -10,7 +10,7 @@
  * What the form receives (the result of calling the action) — rule 16:
  *   { data }                                            success
  *   { validationErrors: { formErrors, fieldErrors } }   Zod rejected the input (422)
- *   { serverError: { ok: false, code, message, fieldErrors? } }
+ *   { serverError: { ok: false, code, message, fieldErrors?, reason? } }  (reason: CONFLICT only)
  *                                                       a DomainError, or INTERNAL for anything else
  */
 import "server-only";
@@ -18,8 +18,10 @@ import { createSafeActionClient } from "next-safe-action";
 import { resolveActor } from "@/server/auth/actor";
 import { getLogger } from "@/server/logger";
 import {
+  Conflict,
   DomainError,
   Validation,
+  type ConflictReason,
   type FieldErrors,
 } from "@/server/domain/errors";
 
@@ -30,6 +32,8 @@ export type ActionError = {
   code: DomainError["code"] | "INTERNAL";
   message: string;
   fieldErrors?: FieldErrors;
+  /** Only on CONFLICT, and only when the domain gave one: lets the form pick a field without reading the message. */
+  reason?: ConflictReason;
 };
 
 export const actionClient = createSafeActionClient({
@@ -41,6 +45,14 @@ export const actionClient = createSafeActionClient({
         code: error.code,
         message: error.message,
         fieldErrors: error.fieldErrors,
+      };
+    }
+    if (error instanceof Conflict && error.reason) {
+      return {
+        ok: false,
+        code: error.code,
+        message: error.message,
+        reason: error.reason,
       };
     }
     if (error instanceof DomainError)
