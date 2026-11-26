@@ -1,5 +1,8 @@
-%% Decision 11 — cart, orders, money. Sources: schema/orders.ts, schema/finance.ts.
+%% Decision 11 — cart, orders, money. Sources: src/server/db/schema/orders.ts, finance.ts (migration 0004; policies and functions: 0005).
 %% buyer_org_id / supplier_org_id are denormalised onto sub-order tables so every RLS policy is one comparison.
+%% Updated D4-B4 (26.11) to the real schema and decision 012: purchase mode per sub-order (no orders.payment_method),
+%% order_payment_status gains not_applicable, ledger gains commission_payment, pro-forma only for the platform part,
+%% order_payments rows come from the worker (gateway events), no invoice_counters (plain sequences).
 erDiagram
   organization ||--|| carts : "buyer org - one shared cart"
   carts ||--o{ cart_items : contains
@@ -10,14 +13,15 @@ erDiagram
   sub_orders ||--|{ order_lines : "snapshots"
   products |o--o{ order_lines : "reference only (NULL for RFQ)"
   sub_orders ||--o{ sub_order_events : history
-  orders ||--|{ proforma_invoices : "one at checkout (version column kept, always 1 in the MVP)"
-  orders ||--o{ order_payments : "buyer pays the platform"
-  sub_orders ||--o{ ledger_entries : "sale, commission, reversals"
-  organization ||--o{ ledger_entries : "supplier balance"
+  orders ||--o| proforma_invoices : "one at checkout, only if the order has a platform part (version column kept, always 1)"
+  orders ||--o{ order_payments : "buyer pays the platform (platform part only)"
+  sub_orders ||--o{ ledger_entries : "sale (platform only), commission, reversals"
+  organization ||--o{ ledger_entries : "supplier balance (may be negative)"
 
   carts {
     uuid id PK
     text buyer_org_id UK
+    timestamptz updated_at
   }
   cart_items {
     uuid id PK
@@ -27,24 +31,27 @@ erDiagram
     int quantity "min + step rules"
     bigint unit_price_cents_seen "detects price changes"
     text added_by_user_id FK
+    timestamptz added_at
+    timestamptz updated_at
   }
   orders {
     uuid id PK
-    text number UK "ORD-2026-000123 (sequence, gaps ok)"
+    text number UK "ORD-2026-000123 (order_number_seq, gaps ok)"
     text buyer_org_id FK
     text placed_by_user_id FK
     text idempotency_key "UK with buyer_org_id"
     text request_hash
     enum source "cart | rfq"
     uuid rfq_quote_id "S5 seam"
-    enum payment_method "proforma | bank_transfer | card"
+    char currency "EUR"
     jsonb buyer_snapshot
     jsonb delivery_snapshot
     bigint net_cents "sum of sub-orders, frozen"
     bigint vat_cents
     bigint gross_cents
-    enum status "in_progress | completed | cancelled (derived)"
-    enum payment_status "unpaid | paid | refund_due (derived)"
+    enum status "in_progress | completed | cancelled (derived by app.recompute_order)"
+    enum payment_status "unpaid | paid | refund_due | not_applicable (derived from the platform part only)"
+    timestamptz placed_at
   }
   sub_orders {
     uuid id PK
@@ -53,14 +60,20 @@ erDiagram
     text buyer_org_id FK
     text supplier_org_id FK "UK with order"
     enum status "pending | confirmed | shipped | delivered | cancelled"
+    enum mode "direct (active contract) | platform (card) - no default, chosen per supplier group in the cart"
+    enum supplier_submission "pending | accepted | rejected | failed - written by the worker only (column grant)"
+    jsonb buyer_snapshot "copy - supplier never reads orders"
     jsonb delivery_snapshot "copy - supplier never reads orders"
     bigint net_cents
     bigint vat_cents
     bigint gross_cents
-    int commission_bps "snapshot: override or default"
+    int commission_bps "snapshot: override or default, charged in BOTH modes"
     bigint commission_cents "half-up, once"
-    enum order_payment_status "copy for the supplier"
-    text cancel_reason
+    enum order_payment_status "copy for the supplier: unpaid | paid | refund_due | not_applicable"
+    text buyer_note
+    text cancel_reason "required when cancelled"
+    text cancelled_by_user_id FK "NULL = system"
+    timestamptz status_changed_at
   }
   order_lines {
     uuid id PK
@@ -68,8 +81,10 @@ erDiagram
     text buyer_org_id FK
     text supplier_org_id FK
     uuid product_id FK "NULL only for RFQ"
+    smallint position "UK with sub-order"
     text sku "snapshot"
     text name "snapshot"
+    text unit "snapshot"
     bigint unit_price_cents "applied price"
     enum price_source "base | tier | buyer | rfq"
     int quantity
@@ -81,25 +96,33 @@ erDiagram
   sub_order_events {
     bigint id PK
     uuid sub_order_id FK
+    text buyer_org_id FK
+    text supplier_org_id FK
     enum from_status
     enum to_status
     text actor_user_id FK "NULL = system"
+    text actor_org_id
     text note
     timestamptz created_at
   }
   proforma_invoices {
     uuid id PK
-    uuid order_id FK "UK with version"
+    uuid order_id FK "UK with version; one issued per order"
     text buyer_org_id FK
-    int version
-    text number UK "PF-2026-000123 from a sequence"
+    int version "1 in the MVP"
+    text number UK "PF-2026-000123 from app.next_invoice_number() (invoice_number_seq)"
     jsonb issuer_snapshot "platform company + IBAN"
-    jsonb content_snapshot "per-supplier sections"
+    jsonb buyer_snapshot
+    jsonb content_snapshot "per-supplier sections, platform sub-orders only"
     jsonb vat_breakdown
+    bigint net_cents "totals of the PLATFORM sub-orders, not of the order"
+    bigint vat_cents
     bigint gross_cents
-    date due_date
-    enum status "issued"
-    text storage_key "set once by PDF job"
+    date due_date "issued_at + invoice_due_days"
+    text payment_reference
+    enum status "issued | superseded (kept for a later re-issue)"
+    text storage_key "S3 object key, set once by the PDF job"
+    timestamptz pdf_generated_at
   }
   order_payments {
     uuid id PK
@@ -108,25 +131,29 @@ erDiagram
     enum type "receipt | refund"
     bigint amount_cents "positive"
     text bank_reference
-    uuid payment_id "S6 seam"
-    text recorded_by_user_id FK "platform admin"
+    uuid payment_id UK "one row per gateway payment; FK to payments comes with D5-B0"
+    text recorded_by_user_id FK "NULL for rows the worker inserts from gateway events"
+    text note
   }
   ledger_entries {
     bigint id PK
     text supplier_org_id FK
-    uuid sub_order_id FK "NULL for payout, adjustment"
-    enum type "sale | commission | sale_reversal | commission_reversal | payout | adjustment"
-    bigint amount_cents "plus = platform owes supplier"
+    uuid sub_order_id FK "NULL for payout, adjustment, commission_payment"
+    enum type "sale | commission | sale_reversal | commission_reversal | payout | adjustment | commission_payment"
+    bigint amount_cents "plus = platform owes supplier; sale and sale_reversal never for direct"
     text description
-    text created_by_user_id FK
+    text reference "bank statement for payout, commission_payment"
+    text created_by_user_id FK "NULL = system"
   }
   settings {
     text key PK "default_commission_bps, platform_company, invoice_due_days, vat_rates_bps"
     jsonb value
+    text updated_by_user_id FK
+    timestamptz updated_at
   }
   audit_log {
     uuid id PK
-    text actor_user_id FK
+    text actor_user_id FK "NULL = system"
     text actor_org_id
     enum actor_org_type
     text action "policy name"
@@ -134,4 +161,5 @@ erDiagram
     text entity_id
     jsonb before
     jsonb after
+    text request_id
   }

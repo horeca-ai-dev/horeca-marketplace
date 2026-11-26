@@ -1,19 +1,24 @@
-%% Decision 11.6 — sub-order state machine. One transition(subOrder, event, actor) function; every
+%% Decision 11.6 + decision 012 — sub-order state machine. One transition(subOrder, event, actor) function; every
 %% transition = conditional UPDATE + sub_order_events row + app.recompute_order() in ONE transaction.
+%% Updated D4-B4 (26.11): purchase mode per sub-order (direct | platform), shipping waits for payment in platform mode,
+%% system cancellation by the worker, ledger effects per mode.
 stateDiagram-v2
   direction LR
-  [*] --> pending : checkout (buyer)<br/>ledger +sale / -commission<br/>mail: buyer confirmation, supplier new sub-order
-  pending --> confirmed : subOrder.confirm (supplier)<br/>mail: buyer
-  confirmed --> shipped : subOrder.ship (supplier)<br/>mail: buyer
+  [*] --> pending : checkout (buyer)<br/>ledger: platform = +sale and -commission, direct = -commission only<br/>mail: buyer confirmation, supplier new sub-order (direct now, platform after payment)
+  pending --> confirmed : subOrder.confirm (supplier)<br/>allowed before payment<br/>mail: buyer
+  confirmed --> shipped : subOrder.ship (supplier)<br/>platform mode only when the order is paid (domain + RLS), direct: no wait<br/>mail: buyer
   shipped --> delivered : subOrder.deliver (supplier)<br/>mail: buyer
-  pending --> cancelled : subOrder.cancel (buyer, supplier, platform)<br/>ledger reversals<br/>mail: the other party
-  confirmed --> cancelled : subOrder.cancel (supplier, platform)<br/>ledger reversals<br/>mail: buyer
+  pending --> cancelled : subOrder.cancel (buyer, supplier, platform)<br/>or system: payment expired after 30 min, supplier API rejected a line<br/>ledger reversals per mode<br/>mail: the other party
+  confirmed --> cancelled : subOrder.cancel (supplier, platform) or system<br/>ledger reversals per mode<br/>mail: buyer
   delivered --> [*]
   cancelled --> [*]
 
   note right of cancelled
-    Reason required. Buyer only while pending;
-    supplier before shipped; platform audited.
+    Reason required. Buyer only while pending (and not while a card payment is pending);
+    supplier and platform before shipped (platform audited).
+    System cancel = app.system_cancel_sub_order(), worker only.
+    Reversals: platform = -sale and +commission; direct = +commission only (no sale was booked).
+    Cancelling a PAID platform sub-order makes the order refund_due until the refund row exists.
     Illegal transition on own sub-order = 409.
   end note
   note left of delivered
@@ -21,4 +26,8 @@ stateDiagram-v2
     all cancelled = cancelled
     all delivered or cancelled = completed
     otherwise in_progress
+    orders.payment_status (derived, platform part only):
+    due = gross of non-cancelled platform sub-orders, paid = receipts - refunds
+    paid more than due = refund_due, due = 0 = not_applicable,
+    paid = due = paid, otherwise unpaid
   end note

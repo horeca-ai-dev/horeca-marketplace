@@ -1,42 +1,60 @@
-%% Decision 11.8 — checkout. Everything between BEGIN and COMMIT is one Postgres transaction under RLS
-%% (buyer context). Side effects are pg-boss jobs enqueued INSIDE the same transaction (updated after the reviews).
+%% Decision 11.8 + decision 012 — checkout. Everything between BEGIN and COMMIT is one Postgres transaction under RLS
+%% (buyer context). Side effects are pg-boss jobs enqueued INSIDE the same transaction.
+%% Updated D4-B4 (26.11): purchase mode per supplier group (no paymentMethod), stock check before the transaction,
+%% contract check for direct, ledger and pro-forma per mode, card payment and supplier submission after commit.
+%% The gateway and supplier-API steps (mock-services) are built in D9-D10; the database steps follow migrations 0004-0005.
 sequenceDiagram
   autonumber
   actor B as Buyer (owner or member)
   participant UI as Checkout page
   participant SA as Server Action (next-safe-action)
+  participant SUP as Supplier stock API (mock-services)
   participant D as createOrder(source = cart)
   participant PG as PostgreSQL (horeca_app, RLS)
   participant Q as pg-boss queue (in PostgreSQL)
   participant W as Worker (horeca_worker)
+  participant GW as Card gateway (mock-services)
 
-  B->>UI: Place order (N sub-orders)
-  UI->>SA: idempotencyKey, deliveryLocationId, paymentMethod, notes
+  B->>UI: Place order (N supplier groups, each: order directly under contract, or pay by card)
+  UI->>SA: idempotencyKey, deliveryLocationId, mode per supplier group, notes
   SA->>SA: Zod validate, resolveActor() from session + member re-check
+  SA->>SUP: fresh stock check per supplier (2-3 s timeout, before the transaction)
+  SUP-->>SA: ok, or unknown when the API is down (that group cannot be ordered, the others can)
   SA->>PG: BEGIN, then set_config(app.user_id, app.org_id, app.org_type, app.role)
   SA->>D: createOrder(tx, actor, input)
   D->>PG: SELECT order WHERE (buyer_org_id, idempotency_key)
   alt key already used
     D-->>SA: same request_hash: existing order / different hash: Validation error
   else new checkout
-    D->>PG: SELECT cart_items ... FOR UPDATE
-    D->>PG: SELECT products, supplier org_profiles (no FOR SHARE: under RLS it returns 0 rows for a buyer)
-    D->>D: revalidate every line: active, supplier approved, min qty + step, PricingResolver price = price seen, buyer tax ID differs from supplier tax ID
+    D->>PG: SELECT cart_items ... FOR UPDATE (the only lock: FOR SHARE on products returns 0 rows for a buyer)
+    D->>PG: SELECT products, supplier org_profiles, supplier_agreements
+    D->>D: revalidate every line: active, supplier approved, min qty + step, PricingResolver price = price seen, buyer tax ID differs from supplier tax ID; mode direct: agreement with that supplier is active
     alt anything changed
       D-->>SA: Conflict with changedLines (nothing written)
     else all valid
       D->>D: splitBySupplier(), money.ts: line VAT, totals, commission (app.resolve_commission_bps)
-      D->>PG: INSERT orders, sub_orders, order_lines, sub_order_events
-      D->>PG: INSERT ledger_entries (sale +gross, commission -commission) per sub-order
-      D->>PG: app.next_invoice_number() (sequence) then INSERT proforma_invoices (no PDF yet)
+      D->>PG: INSERT orders (in_progress, unpaid), sub_orders (mode, supplier_submission pending, unpaid), order_lines, sub_order_events
+      D->>PG: INSERT ledger_entries per sub-order: platform = sale +gross and commission -commission, direct = commission -commission only
+      D->>PG: app.recompute_order() (an order with no platform sub-order becomes not_applicable)
+      opt at least one platform sub-order
+        D->>PG: app.next_invoice_number() (sequence) then INSERT proforma_invoices for the platform part only (no PDF yet)
+      end
       D->>PG: DELETE cart_items
-      D->>Q: enqueue(tx): mail buyer, mail each supplier, render pro-forma PDF (IDs only)
+      D->>Q: enqueue(tx): mail buyer, mail suppliers and submit direct sub-orders to the supplier API, render pro-forma PDF (IDs only)
     end
   end
   SA->>PG: COMMIT (rollback on any error: nothing persisted, no job queued)
-  SA-->>UI: ok + orderId, or error code + message + changedLines
-  Q->>W: email.orderConfirmation, email.newSubOrder x N (SMTP to Mailpit)
-  Q->>W: invoice.render(invoiceId)
+  opt platform part exists
+    SA->>GW: createPayment for the platform part (after commit, 2-3 s timeout; on failure the order page offers Pay now)
+    GW-->>SA: hosted card page URL
+  end
+  SA-->>UI: ok + orderId (+ card page URL), or error code + message + changedLines
+  Q->>W: email jobs, supplier submission of direct sub-orders, invoice.render(invoiceId)
   W->>PG: withSystemTx: read invoice snapshot
   W->>W: Playwright HTML to PDF (once)
   W->>PG: UPDATE proforma_invoices SET storage_key (idempotent: skip if already set)
+  B->>GW: pays on the hosted card page (test cards only)
+  GW->>SA: signed callback (HMAC checked on the raw body), the handler only enqueues one job and answers 200
+  Q->>W: payment event job
+  W->>PG: withSystemTx: payment_events, order_payments receipt, app.recompute_order() (order becomes paid)
+  W->>SUP: submit the platform sub-orders (rejected line: app.system_cancel_sub_order, refund if paid)

@@ -1,4 +1,5 @@
-%% Decision 10 — catalogue. Source of truth: schema/catalogue.ts. Money = bigint cents; rates = bps.
+%% Decision 10 — catalogue. Source of truth: src/server/db/schema/catalogue.ts (migration 0003). Money = bigint cents; rates = bps.
+%% Updated D4-B4 (26.11): width/height + csv filename/error_message from the real schema, media keys are S3 object keys (decision 013), supplier profiles are created as approved by the platform (decision 012).
 erDiagram
   organization ||--|| org_profiles : "1:1 (identity, decision 3)"
   organization ||--o{ products : "supplier owns"
@@ -63,9 +64,11 @@ erDiagram
     text supplier_org_id FK "denormalised for RLS"
     smallint position "UK with product, 0..7"
     text alt
-    text original_key "media volume path; sizes 320/640/1280 WebP by convention"
-    text content_type "jpeg | png | webp (magic bytes)"
-    int size_bytes "max 5 MB"
+    text original_key "S3 object key (Garage bucket horeca-media); sizes 320/640/1280 WebP by convention, no thumb_key"
+    text content_type "image/jpeg | image/png | image/webp (magic bytes)"
+    int size_bytes "1 byte .. 5 MB"
+    int width "NULL while pending, set by the image job"
+    int height "NULL while pending, set by the image job"
     enum status "pending | ready | failed"
   }
   csv_imports {
@@ -73,17 +76,19 @@ erDiagram
     text supplier_org_id FK "one active import per supplier"
     uuid category_id FK
     text created_by_user_id FK
-    text file_key "original file, private bucket"
+    text file_key "original file, S3 object key (private, through the app only)"
+    text filename "as uploaded"
     enum status "uploaded - validating - validated - importing - completed | failed | cancelled"
     int total_rows "max 5000"
     int valid_rows
     int invalid_rows
     int created_count
     int updated_count "upsert by supplier + sku"
-    jsonb report "row, column, message"
+    jsonb report "row, column, message; max 1000 entries"
+    text error_message "set when failed"
   }
   org_profiles {
     text organization_id PK
     enum type "buyer | supplier | platform"
-    enum status "pending | approved | rejected | suspended"
+    enum status "pending | approved | rejected | suspended (suppliers are created approved by the platform, decision 012)"
   }
