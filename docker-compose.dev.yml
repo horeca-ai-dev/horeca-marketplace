@@ -1,4 +1,4 @@
-# Local services: Postgres, Meilisearch, Mailpit. The app itself runs on the host (`pnpm dev`).
+# Local services: Postgres, Meilisearch, Mailpit, Garage (S3). The app itself runs on the host (`pnpm dev`).
 # Values come from .env (copy .env.example). Every port is bound to 127.0.0.1 only.
 # Image versions are pinned exactly (newest patch at least two weeks old when chosen).
 name: horeca-dev
@@ -65,6 +65,30 @@ services:
       retries: 20
     logging: *logging
 
+  # S3-compatible media storage (decision 013). After the first start run scripts/garage-setup.sh once
+  # (layout, bucket, app key); until then the healthcheck reports "unhealthy" on purpose.
+  garage:
+    image: dxflrs/garage:v2.5.0
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set GARAGE_RPC_SECRET in .env (openssl rand -hex 32)}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in .env}
+    ports:
+      - "127.0.0.1:3900:3900" # S3 API only; RPC (3901) and admin API (3903) are not published
+    volumes:
+      - ./deploy/garage/garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    healthcheck:
+      # The image has no shell or curl; `garage health` exits 1 while the cluster is unavailable
+      # (also before the layout is applied by the setup script).
+      test: ["CMD", "/garage", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+
 volumes:
   postgres-data:
   meili-data:
+  garage-meta:
+  garage-data:

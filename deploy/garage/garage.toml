@@ -1,0 +1,26 @@
+# Garage (S3-compatible object storage, decision 013) — one single-node instance per environment.
+# Checked against Garage v2.5.0 (`garage --help`, configuration reference).
+# Secrets are NOT in this file: Garage reads them from the container's environment
+#   GARAGE_RPC_SECRET   — 64 hex characters (openssl rand -hex 32); replaces rpc_secret
+#   GARAGE_ADMIN_TOKEN  — replaces [admin] admin_token
+# Only the S3 API (3900) is ever published, and only locally on 127.0.0.1. RPC (3901) and the
+# admin API (3903) stay inside the Compose network.
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+
+# Single node: every object is stored once. Backups are an S3-level copy (decision 013).
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+# The app's S3_REGION must match this value.
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+# No root_domain: the app uses path-style requests (S3_FORCE_PATH_STYLE=true).
+
+[admin]
+api_bind_addr = "[::]:3903"
