@@ -13,6 +13,10 @@
  * (`accountCreated`): the account part is hidden, the typed company data stays, and the next submit
  * calls completeCompanySetupAction. If the server then finds no session, the user is sent to the
  * login page with a notice; after logging in they land on "Complete company setup".
+ *
+ * Whenever the account may exist without a company, the COMPANY fields (never the account part or
+ * the password) are saved as a draft in sessionStorage, so "Complete company setup" can pre-fill
+ * them (src/lib/auth/company-draft.ts).
  */
 import { useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,6 +29,11 @@ import {
 } from "@/components/domain/form/error-summary";
 import { SubmitButton } from "@/components/domain/form/submit-button";
 import { PasswordField, TextField } from "@/components/domain/form/text-field";
+import {
+  browserDraftStorage,
+  clearCompanyDraft,
+  saveCompanyDraft,
+} from "@/lib/auth/company-draft";
 import { areaFor } from "@/lib/auth/destination";
 import {
   ACCOUNT_FIELDS,
@@ -121,6 +130,7 @@ export function RegisterForm() {
     ).catch(() => undefined); // network failure → the generic message below
 
     if (result?.data) {
+      clearCompanyDraft(browserDraftStorage());
       setRedirecting(true);
       loadPage(areaFor(result.data.type));
       return;
@@ -137,6 +147,15 @@ export function RegisterForm() {
     }
 
     const failure = mapActionError(result?.serverError);
+    // The account exists (PIB taken, no session) or may exist (unexpected error after sign-up):
+    // keep the company data for "Complete company setup". Only the company part is passed.
+    if (
+      failure.reason === "TAX_ID_TAKEN" ||
+      failure.reason === "UNAUTHENTICATED" ||
+      failure.reason === "UNKNOWN"
+    ) {
+      saveCompanyDraft(browserDraftStorage(), getValues("company"));
+    }
     switch (failure.reason) {
       case "TAX_ID_TAKEN":
         // The user exists now; only the company is missing (see the comment at the top).
