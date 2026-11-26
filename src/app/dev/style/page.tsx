@@ -276,7 +276,7 @@ function Tile({
           ) : null}
         </div>
         <p className="mt-auto pt-1">
-          <span className="text-lg font-semibold tabular-nums">{price}</span>{" "}
+          <span className="text-lg font-semibold">{price}</span>{" "}
           <span className="text-xs text-muted-foreground">bez PDV-a</span>
         </p>
         <TileAdd disabled={disabled} />
@@ -379,7 +379,7 @@ export default async function StylePreviewPage({
                 style={{ background: t.hex }}
               />
               <p className="mt-2 text-sm font-medium">--{t.name}</p>
-              <p className="text-xs text-muted-foreground tabular-nums">
+              <p className="text-xs text-muted-foreground">
                 {t.hex.toUpperCase()}
               </p>
               <p className="text-xs text-muted-foreground">{t.use}</p>
@@ -421,7 +421,7 @@ export default async function StylePreviewPage({
                   >
                     <td className="px-4">
                       <span
-                        className="inline-flex h-7 items-center rounded-md px-2 text-sm font-medium tabular-nums"
+                        className="inline-flex h-7 items-center rounded-md px-2 text-sm font-medium"
                         style={
                           isLine
                             ? { background: bg, border: `2px solid ${fg}` }
@@ -450,7 +450,7 @@ export default async function StylePreviewPage({
       </Section>
 
       <Section
-        title="Typeface candidates"
+        title="Typeface — Schibsted Grotesk chosen"
         note="Same sample, same sizes, side by side. Pick by looking; the links at the top render the whole page in either one."
       >
         <div className="grid gap-8 lg:grid-cols-2">
@@ -477,7 +477,7 @@ export default async function StylePreviewPage({
               <div className="mt-6 grid grid-cols-2 gap-6">
                 <div>
                   <p className="text-xs text-muted-foreground">
-                    tabular-nums (the rule)
+                    tabular-nums — amount columns
                   </p>
                   <ul className="mt-2 border-t border-border text-right text-base tabular-nums">
                     {PRICES.map((p) => (
@@ -489,7 +489,7 @@ export default async function StylePreviewPage({
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">
-                    font default (for comparison)
+                    proportional — everywhere else
                   </p>
                   <ul className="mt-2 border-t border-border text-right text-base">
                     {PRICES.map((p) => (
@@ -505,6 +505,47 @@ export default async function StylePreviewPage({
               </p>
             </div>
           ))}
+        </div>
+      </Section>
+
+      <Section
+        title="Figures"
+        note="Tabular figures only where values stack in a column (tables, cart and checkout totals, the invoice). Proportional figures everywhere else: tiles, the product page price, prices inside text."
+      >
+        <div className="grid gap-8 lg:grid-cols-2">
+          <div>
+            <p className="text-xs text-muted-foreground">
+              Product page price and a price in a sentence — proportional
+            </p>
+            <p className="mt-2">
+              <span className="text-2xl font-semibold">1.234,56 €</span>{" "}
+              <span className="text-sm text-muted-foreground">bez PDV-a</span>
+            </p>
+            <p className="mt-2 max-w-[70ch] text-base">
+              Minimalna porudžbina kod ovog dobavljača je 111,10 €. Na ovu
+              porudžbinu ušteđeli ste 41,17 €.
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">
+              Checkout summary — one right-aligned tabular column
+            </p>
+            <dl className="mt-2 border-t border-border text-base">
+              {[
+                ["Naplaćujemo sa Vaše kartice sada", "1.234,56 €"],
+                ["Fakturišu Vam dobavljači", "987,10 €"],
+                ["Ukupno sa PDV-om", "2.221,66 €"],
+              ].map(([label, amount], i) => (
+                <div
+                  key={label}
+                  className={`flex justify-between gap-4 border-b border-border py-2 ${i === 2 ? "font-semibold" : ""}`}
+                >
+                  <dt>{label}</dt>
+                  <dd className="text-right tabular-nums">{amount}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
         </div>
       </Section>
 

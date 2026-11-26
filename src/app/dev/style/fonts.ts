@@ -1,7 +1,8 @@
 /**
  * The two candidate typefaces, for the /dev/style preview ONLY (downloaded from Google at build time).
- * The chosen one is committed as local files and loaded with next/font/local in the root layout in
- * D4-A1 (DESIGN.md → Typography); this file is then deleted together with the other candidate.
+ * Schibsted Grotesk was chosen (26.11.2026): it is committed as local files and loaded with
+ * next/font/local in the root layout in D4-A1 (DESIGN.md → Typography); this file is then deleted
+ * together with the other candidate.
  *
  * Verified on 26.11.2026 against the served woff2 files: both have č ć š ž đ (latin-ext) and €
  * (latin). Schibsted needs `tabular-nums` (it has the `tnum` feature); Hanken's digits are all the
