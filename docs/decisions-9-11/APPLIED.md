@@ -2,6 +2,8 @@
 
 The files in this folder are Member B's deliverable of 24.11.2026 and are **deliberately left unedited**. Since then, Member A's review, decisions A–J and two independent reviews (Fable, rounds 1 and 2) changed parts of them. **Where this file and the folder disagree, this file wins.** Task IDs refer to the current `TASKS.md`.
 
+> **Decision J (media on a Docker volume) is superseded by [decision 013](../decisions/013-s3-compatible-storage-garage.md) (26.11.2026):** media lives in S3-compatible storage (self-hosted Garage) and is accessed only through the S3 API; the object-key convention (`products/<image id>/…`, `invoices/<order id>.pdf`) stays, so "paths on the media volume" below means object keys in the bucket.
+
 > **Decision 012 (25.11.2026) overrides parts of §1–§3 below.** Items it replaces are marked **⟶ 012 §n**; the replacement is in **§4 Decision 012 overrides** at the end of this file. Where §4 and §1–§3 disagree, §4 wins; where §4 and `docs/decisions/012-purchase-modes-payments-stock.md` disagree, the decision file wins.
 
 ## 1. Accepted from the deliverable (into the planning documents)

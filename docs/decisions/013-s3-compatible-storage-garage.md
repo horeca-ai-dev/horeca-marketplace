@@ -14,6 +14,7 @@ The mentor asked for S3-compatible object storage instead of files on the server
 - **Object keys** follow J's convention: `products/<image id>/original`, `products/<image id>/<320|640|1280>.webp`, `invoices/<order id>.pdf`.
 - **Garage setup** (once per environment, idempotent script in the repo): configure the node layout (single zone, capacity), create the bucket, create the key, allow the key read/write on the bucket; print the key ID and secret once for the `.env`. Garage's own secrets (`rpc_secret`, `admin_token`) come from the environment's `.env`, never from git. Commands must be verified against the pinned Garage 2.x documentation.
 - **Tests:** integration tests run against a real Garage container (Testcontainers), like PostgreSQL and Meilisearch.
+- **No storage call inside a transaction:** S3 is an external call like e-mail or Meilisearch, so CLAUDE.md rule 11 lists **storage (S3)** among the calls never made inside a database transaction (upload → store the object, then commit the row; jobs re-read state and are idempotent).
 - **Backups:** nightly, object-level copy of the bucket through the S3 API (e.g. an `rclone sync` in a one-off container) into `/var/backups/horeca/<env>/media/`, instead of archiving a live volume. Restore = copy back through the S3 API.
 
 ## Moving off the server later (the reason this is cheap)
@@ -27,7 +28,7 @@ Change `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET` and the keys in `.env` to an exte
 | Storage module (Member B) | S3 client instead of file system; image job reads the original from S3 and writes the 3 WebP sizes back; invoice job stores the PDF in S3; download / media routes stream from S3 |
 | Health | Garage reported as "degraded" when unreachable (not blocking), like Meilisearch |
 | Backups | `backup.sh`: media via S3-API copy instead of a volume archive |
-| Docs | README (stack, env table, server, backups, key decisions + rejected alternatives), CLAUDE.md (stack, media rule), DESIGN.md (no change to the UI), TASKS, `APPLIED.md` note (decision J superseded), specification |
+| Docs | README (stack, env table, server, backups, key decisions + rejected alternatives), CLAUDE.md (stack, media rule, rule 11: storage (S3) added to "no external call inside a transaction"), DESIGN.md (no change to the UI), TASKS, `APPLIED.md` note (decision J superseded), specification |
 
 ## Plan changes
 | Task | Owner | Change | Time |

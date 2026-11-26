@@ -56,13 +56,13 @@ Realistically 1–2 of them:
 | UI → server | Server Components (reads) + Server Actions via next-safe-action (writes) | No API layer to maintain; typed end to end |
 | UI | shadcn/ui + Tailwind, TanStack Table, React Hook Form | Owned components, data-dense dashboards, fast forms |
 | Jobs | pg-boss (queue inside PostgreSQL) | Jobs are enqueued in the same transaction as the data, so none are lost; no Redis to run |
-| Files | Docker volume on the server (a folder locally) behind one storage module + sharp | Product images in 3 WebP sizes served with `srcset` (fast pages); invoice PDFs; no external account; backed up nightly |
+| Files | S3-compatible object storage: self-hosted **Garage**, one per environment, behind one storage module (S3 API only) + sharp (decision 013) | Standard object storage from the start; product images in 3 WebP sizes served with `srcset` through our media route; invoice PDFs; no external account; moving to R2 / B2 / AWS S3 later = configuration only |
 | PDF | Playwright HTML → PDF, in the worker | Print-quality invoices from React/Tailwind templates |
 | E-mail | React Email templates · SMTP to Mailpit in every environment | The brief needs no real e-mail; demo e-mails are shown in the Mailpit inbox; a real provider = one env variable later |
 | Tests | Vitest · Testcontainers · fast-check · Playwright · `psql` | Real Postgres/Meilisearch; RLS SQL tests; property tests for money; E2E on staging |
 | Mocks | `mock-services` — card gateway + supplier stock API, the **fourth entry point** of the image (web, worker, migrate, mock-services) | Realistic payment and stock flows with no external accounts; behaviours (declined card, API down, out of stock) can be demoed |
 | Ops | Docker Compose · GitHub Actions · GHCR · Tailscale · Nginx · pino | Build once, promote the same image |
-| Versions | Node.js 26 LTS · PostgreSQL 16 · Next.js 16.4 · Meilisearch 1.56 | Exact versions pinned; upgrades ≥ 2 weeks old except security releases |
+| Versions | Node.js 26 LTS · PostgreSQL 16 · Next.js 16.4 · Meilisearch 1.56 · Garage 2.5 | Exact versions pinned; upgrades ≥ 2 weeks old except security releases |
 
 ## Architecture
 ```mermaid
@@ -78,8 +78,8 @@ flowchart LR
     PG -->|jobs| WRK
     DOM -->|searchProducts| MS[(Meilisearch)]
     WRK --> MS
-    WEB --> MV[(Media volume<br/>images · invoice PDFs)]
-    WRK --> MV
+    WEB -->|S3 API| MV[(Garage — S3, internal only<br/>images · invoice PDFs)]
+    WRK -->|S3 API| MV
     WRK -->|SMTP| MAIL[Mailpit]
     MOCK["mock-services<br/>card gateway (/gateway/) · supplier stock API"]
     WEB -->|createPayment · stock check<br/>2–3 s timeout| MOCK
@@ -114,15 +114,25 @@ Consequence: any environment-specific value in a `NEXT_PUBLIC_*` variable (API U
 git clone <repo-url> && cd horeca-marketplace
 cp .env.example .env           # fill values; never commit .env
 pnpm install                   # also installs Git hooks (Husky)
-docker compose -f docker-compose.dev.yml up -d   # Postgres (+ init script with the 3 logins), Meilisearch, Mailpit
+docker compose -f docker-compose.dev.yml up -d   # Postgres (+ init script with the 3 logins), Meilisearch, Mailpit, Garage
+scripts/garage-setup.sh        # once: bucket + S3 key for .env — see "Local S3 (Garage)" below
 pnpm db:migrate
 pnpm db:seed
 pnpm dev                       # http://localhost:3000
 pnpm worker:dev                # second terminal
 ```
-Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the folder set in `MEDIA_DIR`.
+Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the Garage bucket `horeca-media` (S3 API at `http://127.0.0.1:3900`). *(Until the storage module moves to S3 on D5-B3, the app still reads `MEDIA_DIR`.)*
 
 **Database logins:** on first start, `deploy/postgres/init/01-roles.sh` creates `horeca_owner` (owns the `horeca` database, runs migrations), `horeca_app` and `horeca_worker` from the `POSTGRES_*_PASSWORD` values in `.env`. The script runs **only on an empty data volume**. If you change those passwords, or want a clean database, reset the volumes with `docker compose -f docker-compose.dev.yml down -v`, which deletes all local data. All ports are bound to `127.0.0.1`.
+
+### Local S3 (Garage)
+Media (product images, invoice PDFs) lives in S3-compatible object storage — a single-node **Garage** container ([decision 013](docs/decisions/013-s3-compatible-storage-garage.md)). The app talks to it only through the S3 API in `src/server/storage`; only the S3 port `127.0.0.1:3900` is published (RPC and admin API stay inside the Compose network).
+1. In `.env`: `GARAGE_RPC_SECRET=$(openssl rand -hex 32)` (64 hex characters — Garage refuses to start otherwise) and any `GARAGE_ADMIN_TOKEN`.
+2. `docker compose -f docker-compose.dev.yml up -d garage` — it shows **unhealthy until step 3** (no layout yet).
+3. `scripts/garage-setup.sh` — applies the single-node layout, creates the bucket `horeca-media` and the key `horeca-app` with read/write on it, and prints `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` **once**: paste both into `.env`. Safe to run again (it skips what exists and never prints the secret again; to see it: `docker compose -f docker-compose.dev.yml exec garage /garage key info --show-secret horeca-app`).
+4. Check: `docker compose -f docker-compose.dev.yml exec garage /garage health` → `HEALTHY`.
+
+Config: `deploy/garage/garage.toml` (no secrets — Garage reads `GARAGE_RPC_SECRET` / `GARAGE_ADMIN_TOKEN` from the container environment). `docker compose … down -v` also deletes the bucket and its key — run the setup script again and update `.env`.
 
 ### Environment (`.env.example`)
 | Variable | Purpose |
@@ -135,7 +145,10 @@ Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the folder
 | `DATABASE_MIGRATE_URL` | Owner login `horeca_owner` — migrate container only |
 | `MEILI_HOST`, `MEILI_API_KEY` | Meilisearch (server-side only, never sent to the browser) |
 | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Better Auth |
-| `MEDIA_DIR` | Media volume path (product images, invoice PDFs) |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_FORCE_PATH_STYLE` | Media storage (product images, invoice PDFs) via the S3 API — Garage locally (`http://127.0.0.1:3900`, region `garage`, bucket `horeca-media`, path-style `true`); on the server the internal Garage service |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | The app's key (read/write on that one bucket only), printed once by `scripts/garage-setup.sh` |
+| `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN` | Garage's own secrets, read by the Garage container only (RPC secret: `openssl rand -hex 32`) |
+| `MEDIA_DIR` | **Being removed** (decision 013): still required by `src/env.core.ts` until the storage module moves to S3 (D5-B3) |
 | `EMAIL_FROM`, `SMTP_URL` | SMTP to Mailpit in every environment |
 | `REGISTRATION_OPEN` | `true` / `false` — close registration on production if needed |
 | `SEED_DEMO_PASSWORD` | Password for seeded demo accounts; required on production (never the README password) |
@@ -173,7 +186,7 @@ src/
     jobs/           # pg-boss queues and processors
     search/         # Meilisearch client + searchProducts()
     email/          # sendEmail() adapter (SMTP) + React Email templates
-    storage/        # save / read / delete on the media volume
+    storage/        # put / get / delete / head / list via the S3 API (Garage)
   lib/              # shared Zod schemas, formatting
   env.core.ts       # runtime config (Zod, assertEnv) — the only reader of process.env
   env.ts            # server-only re-export for Next.js code
@@ -332,14 +345,15 @@ Done already: user `deploy` (docker group), `/opt/horeca/{staging,production,bin
 | Staging | Server, Compose project `horeca-staging`, behind basic auth | Seed, resettable (`deploy.sh staging-reset <sha>`) |
 | Production | Server, Compose project `horeca-production` | Real |
 
-- **Isolation:** staging and production have separate Compose projects, networks, volumes, `.env` files and media volumes, plus `mem_limit` on every container. Each runs web, worker, mock-services, Postgres (with the job queue), Meilisearch and Mailpit. Our Nginx routes `/gateway/` to `mock-services`; the gateway's admin page is behind basic auth in every environment. The Mailpit UI is served by our Nginx at `/_mail/` behind basic auth (shown on screen in the demo — no SSH tunnel needed).
+- **Isolation:** staging and production have separate Compose projects, networks, volumes, `.env` files and Garage instances (each with its own bucket and key), plus `mem_limit` on every container. Each runs web, worker, mock-services, Postgres (with the job queue), Meilisearch, Garage and Mailpit.
+- **Media storage (decision 013; on the server from D5):** one single-node Garage container per environment (≈ 128m, volumes for data + metadata), **internal only** — no `ports:` entry, nothing for the public proxy, Tailscale or Nginx; web and worker reach it by service name over the S3 API, and images / PDFs reach browsers only through our media and download route handlers (login required, `Cache-Control: private`). Set up once per environment with `scripts/garage-setup.sh`. Our Nginx routes `/gateway/` to `mock-services`; the gateway's admin page is behind basic auth in every environment. The Mailpit UI is served by our Nginx at `/_mail/` behind basic auth (shown on screen in the demo — no SSH tunnel needed).
 - **Domains & traffic:** `horeca.bogdandelic.online` (production) and `staging.horeca.bogdandelic.online` — A records at Namecheap pointing to the friend's public server, which terminates TLS (certbot) and forwards over **Tailscale** to our server (`proxy_pass http://<SERVER_TAILSCALE_IP>:8081` for both domains). It must pass `X-Forwarded-For`, `X-Forwarded-Proto: https` and the host, allow ≈ 20 MB uploads and slightly longer timeouts.
 - **Our Nginx (on the server, listening on the Tailscale address only, port `8081`):** one site per environment on the same address:port, told apart by `server_name` → `127.0.0.1:3102` (prod) / `127.0.0.1:3101` (staging) — host ports 3000/3001 are taken on the server; `auth_basic` on staging; `set_real_ip_from` = friend's Tailscale IP; `X-Forwarded-Proto` passed through unchanged; `client_max_body_size` ≈ 20 MB.
 - **⚠️ Ports:** every `ports:` entry starts with `127.0.0.1:` (e.g. `127.0.0.1:3102:3000` prod, `127.0.0.1:3101:3000` staging; Mailpit UI `127.0.0.1:8127` / `127.0.0.1:8126` — set by `WEB_PORT` / `MAILPIT_UI_PORT` in each `.env`). The short form `"3000:3000"` binds to all interfaces, and Docker's iptables rules are evaluated **before ufw** — the port becomes public even though ufw "blocks" it. Postgres and Meilisearch have **no** `ports:` entry on the server.
 - **Hardening:** the server has **no public IP** — it is reachable only from its local network and through Tailscale — and **no active host firewall**. So nothing relies on a firewall: every HoReCa port is bound explicitly, containers to `127.0.0.1` and our Nginx to the Tailscale address (`<SERVER_TAILSCALE_IP>:8081`); Postgres and Meilisearch publish no port at all. SSH keys only, no root or password login; automatic OS security updates; the `deploy` user only runs `deploy.sh`.
 - **Other services on the server** (it is shared) are outside this project: their ports, exposure and updates are not managed or covered here.
-- **Health:** Docker healthchecks; `/api/health` = Postgres + migration version (gates deploys); Meilisearch, Mailpit and the worker reported as degraded (worker: oldest waiting pg-boss job older than 5 min).
-- **Backups:** nightly `pg_dump` of production plus one before every production deploy, and a nightly archive of the production **media volume**, stored on the server; keep 7 nightly + 5 pre-deploy dumps. A restore of a pre-deploy dump into a scratch container is tested once (D5); restored waiting jobs run again, which is harmless with Mailpit. Meilisearch is rebuilt with `pnpm search:reindex`; staging is not backed up.
+- **Health:** Docker healthchecks; `/api/health` = Postgres + migration version (gates deploys); Meilisearch, Garage, Mailpit and the worker reported as degraded (worker: oldest waiting pg-boss job older than 5 min).
+- **Backups:** nightly `pg_dump` of production plus one before every production deploy, and a nightly **object-level copy of the production bucket through the S3 API** (an `rclone sync` in a one-off container → `/var/backups/horeca/production/media/`; restore = copy back through the S3 API — from D5, until then `backup.sh` archives the media volume), stored on the server; keep 7 nightly + 5 pre-deploy dumps. A restore of a pre-deploy dump into a scratch container is tested once (D5); restored waiting jobs run again, which is harmless with Mailpit. Meilisearch is rebuilt with `pnpm search:reindex`; staging is not backed up.
 - **Database logins:** three roles per environment, created by the Postgres init script — `horeca_owner` (non-superuser owner, migrations), `horeca_app` (web), `horeca_worker` (worker); passwords in the server's `.env` files, never in Git.
 - **Secrets:** runtime secrets in `/opt/horeca/staging/.env` / `/opt/horeca/production/.env` on the server (mode `600`, owned by `deploy`); CI secrets (SSH key, GHCR token if the image package is private) in GitHub Environments, next to the non-sensitive Tailscale federated-identity values `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` (there is no Tailscale client secret).
 - **Monitoring:** pino JSON logs with Docker log rotation; `/api/health`. (Sentry, an uptime monitor and an admin Jobs page are on the "after the project" list.)
@@ -362,7 +376,7 @@ Done already: user `deploy` (docker group), `/opt/horeca/{staging,production,bin
 - On-server backups only *(off-server copy — accepted risk)*
 - Public repo in a free GitHub organization *(private repo — needs a paid plan for rulesets and environment approvals; self-hosted Gitea — mentors could not see it, CI would run on the production server, no approval gate)*
 - Deploy through Tailscale's GitHub Action *(self-hosted runner; server pulling new versions — breaks the approval and rollback flow)*
-- Media on a Docker volume, 3 WebP sizes with `srcset` *(S3-compatible storage — a second storage service or an external account with no benefit on one server)*
+- Media in S3-compatible object storage — self-hosted Garage per environment, internal only, uploads and downloads through the app, 3 WebP sizes with `srcset` (decision 013, replaces decision J) *(Docker volume — not object storage, harder to move; MinIO — archived in April 2026; a cloud bucket now — external account and card, possible later by configuration only; presigned direct browser uploads now — need a public storage endpoint and CORS, not needed for the demo)*
 - Mailpit for all e-mail *(Resend — the brief needs no real e-mail; seeded addresses cannot receive mail)*
 - Manual rollback with a pre-deploy dump *(automatic rollback — requires every migration to be backward-compatible)*
 - Normal invoice number sequence *(gapless numbering — a pro-forma has no legal numbering requirement; it serialises all checkouts)*
@@ -398,7 +412,7 @@ Full ADRs: [`docs/decisions/`](docs/decisions/).
 - Product photos in the generated seed are dummy images.
 - The pro-forma covers only the platform part; direct sub-orders are invoiced by the supplier outside the platform. After a cancellation the stored PDF keeps the original total; the order page shows the amount due.
 - The public proxy (friend's server) terminates HTTPS and could see traffic; fine for a demo with fake data, not for real customers. If that server is down, the site is down.
-- Media files (images, PDFs) live only on the server; the site cannot be spread across several servers.
+- Media files (images, PDFs) live in a single-node Garage on the same server (replication factor 1) — no redundancy beyond the nightly S3 copy; moving them to an external S3 provider is a configuration change plus one `rclone sync` (decision 013).
 - Backups are stored on the same server — a disk failure loses data and backups together.
 - Staging and production share one server — a server outage takes down both.
 - *(Add every stretch feature not finished by the feature freeze.)*
