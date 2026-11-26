@@ -1,6 +1,6 @@
 # Permission matrix and authorization (Specification §7.3)
 
-*Member B · task D3-AB1 · state: 25.11.2026, after decision 012.*
+*Member B · task D3-AB1 · state: 26.11.2026, after decision 012; the matrix is implemented as code (D4-B3) and row-level security is on (D4-B2).*
 The **full matrix and the named-policy list** are in
 [`docs/decisions-9-11/permission-matrix.md`](../decisions-9-11/permission-matrix.md) (decision 9). That file was
 written before decision 012 and is deliberately left unedited, so **this file lists what 012 changed**.
@@ -32,7 +32,8 @@ Where the two disagree, this file and [`APPLIED.md`](../decisions-9-11/APPLIED.m
 
 **Authentication:** Better Auth 1.7.20, e-mail + password, organization plugin **locked down** — users cannot
 create or delete organizations; `/organization/*` is an allowlist; `trustedOrigins` = both domains; sign-in rate
-limit 5/min per IP (client IP from `X-Real-IP`); `REGISTRATION_OPEN` closes registration. **Public registration
+limit 5/min per IP (client IP from `X-Real-IP`; switched on whenever `APP_ENV` is staging or production, and
+verified on staging on 26.11); `REGISTRATION_OPEN` closes registration. **Public registration
 creates buyer organizations only** (012 §8); suppliers are created by the admin ("Create supplier": organization +
 profile `approved` + owner user, without starting a session; a set-password link is shown once to the admin).
 Better Auth's own tables have no RLS.
@@ -105,8 +106,17 @@ The list in `permission-matrix.md` §2 is the base. **Changes from 012:**
 | System, not user actions | payment events, stock sync, supplier submission, payment expiry — run by the worker (`horeca_worker`) or `app.system_cancel_sub_order()` |
 
 Each policy gets at least two authorization tests (allowed actor ✓, foreign org of the same type → 404); role
-restrictions also get "member → 403". The matrix-driven harness is **D4-B3**; today `policy.can` is a stub with
-one action and a deny-by-default `switch` that fails to compile when an action has no branch.
+restrictions also get "member → 403".
+
+**As code (D4-B3, 26.11):** `PERMISSIONS` in `src/server/domain/policy.ts` has one row per named policy (organization
+type, owner or any member); `decide()` answers `allow`, `not_found` (another area, or a foreign resource — checked
+first) or `forbidden` (own organization, but the role may not); `can()` and `assertCan()` are built on it, deny by
+default. `policy-matrix.test.ts` **parses §2 of `permission-matrix.md`** and checks every policy × the five kinds of
+actor × no / own / foreign resource, so the document and the table cannot drift apart. Rows deliberately not in the
+code: `org.register` (no organization exists yet), `supplier.approve` / `.reject` / `.reapply` and
+`payment.recordReceipt` / `.recordRefund` (removed by 012);
+the "Added" rows above and the stretch rows join the table with their features. Status preconditions ("must be
+`confirmed`") and field-level rules ("tax ID: platform only") belong to the domain services, not to `policy.can`.
 
 ## 4. Table coverage
 
@@ -135,8 +145,14 @@ adjustments, **commission payments**, IBAN and legal-data changes, and — writt
 
 ## 7. Known gaps (said plainly)
 
-- `policy.can` is a stub (one action); the real matrix as code is **D4-B3**. The pre-012 text above is a
-  specification, not yet an implementation.
-- RLS is not enabled yet — tables from 0001 have grants only; policies land with **D4-B2**.
-- The sign-in limit (5/min per IP) is configured and tested; the password-reset and registration limits rely on
-  Better Auth's defaults, which are still to be verified against 1.7.20.
+- **No domain service calls `policy.can` yet** (services start with D5): the table and its test exist, the status
+  and field-level checks do not. Policies added by 012 (`agreement.*`, `payment.payByCard`, `supplier.create`,
+  `ledger.recordCommissionPayment`, `stock.view`) are not in the table until their features land (D5–D10, D16).
+- **Row-level security is on** (migration 0005, 26.11) for the tables that exist; the tables of migration 0006
+  (contracts, payments, payment events, product stock) get their policies and tests in D5-B0. The database check
+  "`direct` needs an `active` contract" and the worker's INSERT on `order_payments` come with it.
+- **The owner login bypasses RLS by design** (RLS is `ENABLE`d, not `FORCE`d): `DATABASE_URL` must never be the
+  owner's URL. Contained by separation and review, see [ADR 014](../decisions/014-rls-owner-escape-hatch.md); a startup
+  check that refuses the owner login is a possible later hardening, not done.
+- The sign-in limit (5/min per IP) is configured, tested, and verified on staging; the password-reset and
+  registration limits rely on Better Auth's defaults, which are still to be verified against 1.7.20.
