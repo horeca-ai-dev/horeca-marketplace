@@ -74,7 +74,7 @@ Whatever is not finished at G4 goes into README → Known limitations. If someth
 - [x] **D2-AB0** Decisions A–J, independent review (Fable), review decisions applied.
 - [ ] **D2-AB1 First hour — easy to forget** (from the final check):
   - DNS + friend's proxy first (D1-A1) — propagation and certbot take hours.
-  - Tailscale: create the **federated identity** credential (workload identity federation; subject `repo:horeca-ai-dev/horeca-marketplace:environment:*`, tag `tag:ci`) and add the grant `tag:ci` → only `tcp:22` on the server now; store `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` in both GitHub Environments (not sensitive).
+  - Tailscale: create the **federated identity** credential (workload identity federation; subject `repo:horeca-ai-dev@360824986/horeca-marketplace@1470667672:environment:*`, tag `tag:ci`) and add the grant `tag:ci` → only `tcp:22` on the server now; store `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` in both GitHub Environments (not sensitive).
   - Both: `git config user.email` = the address on your GitHub account **before the first commit** (commits from both members are graded).
   - Push the first commit to `main`, **then** switch on the ruleset (a protected empty repo cannot take its first PR).
   - First commit contains `.gitignore` with `.env*` and the gitleaks config — before any real value exists on disk.
