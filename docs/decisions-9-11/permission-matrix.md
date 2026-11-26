@@ -20,8 +20,8 @@ Two layers (CLAUDE.md rule 6):
 **As code (D4-B3):** §2 is mirrored by `PERMISSIONS` in `src/server/domain/policy.ts`, and
 `src/server/domain/policy-matrix.test.ts` parses §2 (this file) and checks every row against `decide()` for the five
 kinds of actor × no / own / foreign resource. Edit this document and the table together. Rows kept here but not in
-the code: `org.register` (the auth layer's, no organization yet) and `supplier.approve` / `.reject` / `.reapply`
-(removed by decision 012). Stretch rows join the table with their features. Status preconditions and field-level
+the code: `org.register` (the auth layer's, no organization yet) and `supplier.approve` / `.reject` / `.reapply` and
+`payment.recordReceipt` / `.recordRefund` (removed by decision 012). Stretch rows join the table with their features. Status preconditions and field-level
 rules stay in the domain services.
 
 ## 1. Matrix
