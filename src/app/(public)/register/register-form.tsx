@@ -16,7 +16,9 @@
  *
  * Whenever the account may exist without a company, the COMPANY fields (never the account part or
  * the password) are saved as a draft in sessionStorage, so "Complete company setup" can pre-fill
- * them (src/lib/auth/company-draft.ts).
+ * them (src/lib/auth/company-draft.ts). A draft is stored with the id of the user it belongs to,
+ * which the form reads from the session the failed registration left behind; without a session
+ * there is no id, so no draft is kept.
  */
 import { useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -28,6 +30,7 @@ import {
   useErrorSummary,
 } from "@/components/domain/form/error-summary";
 import { SubmitButton } from "@/components/domain/form/submit-button";
+import { authClient } from "@/lib/auth-client";
 import { PasswordField, TextField } from "@/components/domain/form/text-field";
 import {
   browserDraftStorage,
@@ -118,6 +121,19 @@ export function RegisterForm() {
     focusSummary();
   }
 
+  /**
+   * Saves the company part as a draft of the user who is logged in right now — the account this
+   * registration has just created. No session (the sign-up did not happen, or its cookie is gone)
+   * → no draft: an ownerless draft could be shown to whoever logs in next in this tab.
+   */
+  async function keepCompanyDraft() {
+    const storage = browserDraftStorage();
+    const session = await authClient.getSession().catch(() => null);
+    const userId = session?.data?.user.id;
+    if (userId) saveCompanyDraft(storage, userId, getValues("company"));
+    else clearCompanyDraft(storage);
+  }
+
   async function onValid(values: RegistrationInput) {
     if (busy.current) return;
     busy.current = true;
@@ -147,14 +163,14 @@ export function RegisterForm() {
     }
 
     const failure = mapActionError(result?.serverError);
-    // The account exists (PIB taken, no session) or may exist (unexpected error after sign-up):
-    // keep the company data for "Complete company setup". Only the company part is passed.
-    if (
-      failure.reason === "TAX_ID_TAKEN" ||
-      failure.reason === "UNAUTHENTICATED" ||
-      failure.reason === "UNKNOWN"
-    ) {
-      saveCompanyDraft(browserDraftStorage(), getValues("company"));
+    // The account exists (PIB taken) or may exist (unexpected error after sign-up): keep the
+    // company data for "Complete company setup".
+    if (failure.reason === "TAX_ID_TAKEN" || failure.reason === "UNKNOWN") {
+      await keepCompanyDraft();
+    }
+    // No session = nobody to keep a draft for.
+    if (failure.reason === "UNAUTHENTICATED") {
+      clearCompanyDraft(browserDraftStorage());
     }
     switch (failure.reason) {
       case "TAX_ID_TAKEN":

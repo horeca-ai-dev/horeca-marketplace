@@ -6,7 +6,8 @@
  * completeCompanySetupAction.
  *
  * If the register form left a company draft in sessionStorage (registration stopped after the
- * account was created), the form starts pre-filled from it and says so. The draft is read in the
+ * account was created), the form starts pre-filled from it and says so — but only if the draft was
+ * saved for THIS user (`userId`, the logged-in user, from the server). The draft is read in the
  * browser after the page has loaded (the server cannot see sessionStorage), validated by the shared
  * schema, and deleted once the company exists.
  */
@@ -54,7 +55,7 @@ const EMPTY: FormValues = {
   contactPhone: "",
 };
 
-export function CompanyForm() {
+export function CompanyForm({ userId }: { userId: string }) {
   const t = useTranslations();
   const [prefilled, setPrefilled] = useState(false);
   const {
@@ -71,7 +72,7 @@ export function CompanyForm() {
     // A function: React Hook Form calls it in the browser after the first render, then fills the
     // inputs — so the server-rendered (empty) form and the browser's first render are identical.
     defaultValues: async () => {
-      const draft = loadCompanyDraft(browserDraftStorage());
+      const draft = loadCompanyDraft(browserDraftStorage(), userId);
       if (draft) setPrefilled(true);
       return draft ?? EMPTY;
     },
@@ -128,7 +129,7 @@ export function CompanyForm() {
         return;
       case "UNAUTHENTICATED":
         // The session ended: log in again, then come back here.
-        saveCompanyDraft(browserDraftStorage(), getValues());
+        saveCompanyDraft(browserDraftStorage(), userId, getValues());
         setRedirecting(true);
         loadPage("/login?notice=account-created");
         return;

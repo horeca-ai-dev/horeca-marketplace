@@ -20,7 +20,7 @@ export default async function CompleteSetupPage() {
         <h1 className="text-2xl">{t("title")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{t("description")}</p>
       </div>
-      <CompanyForm />
+      <CompanyForm userId={state.userId} />
     </div>
   );
 }
