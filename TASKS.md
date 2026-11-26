@@ -9,6 +9,8 @@
 
 > **Decision 012 (25.11) applied:** three purchase modes, contracts, mock card gateway (MVP), supplier stock API, admin-onboarded suppliers, Montenegrin UI — see [`docs/decisions/012-purchase-modes-payments-stock.md`](docs/decisions/012-purchase-modes-payments-stock.md) §13. Estimates marked *(012 est.)* are new or revised for that decision.
 
+> **Decision 013 (26.11) applied:** media in S3-compatible storage (self-hosted Garage) instead of a Docker volume — see [`docs/decisions/013-s3-compatible-storage-garage.md`](docs/decisions/013-s3-compatible-storage-garage.md) "Plan changes": new **D4-A5** and **D5-A5**, D5-B3 / D6-B1 on the S3 API, Garage in the integration setup. To keep A's D4 within 8.5h, **D4-A2 moved to D5** and **D5-A4 to D6**. Marked *(013)*.
+
 Task format: `- [ ] **D9-B1** (B · 4h)` = day 9, task 1, owner B, estimate. Estimates include reviewing Claude's output; plan ≈ 6 focused hours per person per day **plus ≈ 1h of reading the other member's merged PRs** (not in the estimates).
 
 ## Workflow
@@ -112,31 +114,33 @@ Whatever is not finished at G4 goes into README → Known limitations. If someth
 - [ ] **D4-B3** (B · 1h) Policy module: permission matrix as code + matrix-driven authorization test harness.
 - [ ] **D4-AB1** (A+B · 1h) Walkthrough: B explains `rls.sql`, roles and the checkout transaction to A.
 - [ ] **D4-A1** (A · 1h) UI shell: shadcn, design tokens, Inter `latin-ext`, layouts for `/buyer`, `/supplier`, `/admin`, auth layout, staging banner.
-- [ ] **D4-A2** (A · 2h) Shared UI: shadcn components, DataTable wrapper, MoneyText, StatusBadge, OrgBadge; `error.tsx` / `not-found.tsx` mapped to typed domain errors.
 - [ ] **D4-A3** (A · 2h) *(012 est.)* Auth UI: login, register (**buyer company only** — suppliers are created by the admin), "Complete company setup" (buyers), all in Montenegrin.
+- [ ] **D4-A5** (A · 1.5h) *(013)* **Local Garage:** `dxflrs/garage` 2.x (exact pin) in `docker-compose.dev.yml` — single node, replication factor 1, data + meta volumes, S3 API on `127.0.0.1:3900` only (admin API and RPC not published); `deploy/garage/garage.toml` with `rpc_secret` / `admin_token` from `.env`; idempotent `scripts/garage-setup.sh` (layout, bucket `horeca-media`, app key with read/write, key printed once); `.env.example` S3 + Garage variables; README "Local S3 (Garage)". The config file and the script are reused by the D5 server task (D5-A5) and by B's Garage container in the integration setup (D5-B3) — no Testcontainers helper here.
 - [ ] **D4-B4** (B · 0.3h) Update diagrams 08, 09, 11, 12 (`.mmd`) if anything changed during the migrations, before the specification links to them.
 - [ ] **D4-AB2** (A+B · 0.5h) Specification submitted to the mentor (with decision 012). **→ G1 part 1** (ERD freeze moves to D5 EOD).
-- *A ≈ 8.5h, B ≈ 9.3h incl. the walkthrough — **B 0.8h over 8.5h, accepted** (no clean move: B has no free hour D5–D12, D4-B3's harness is needed by D8-B2, D4-B4 must precede the spec). If B runs over, D4-B3 moves to D5 morning.*
+- *A ≈ 8h (+1.5h D4-A5, −2h D4-A2 → D5; 013), B ≈ 9.3h incl. the walkthrough — **B 0.8h over 8.5h, accepted** (no clean move: B has no free hour D5–D12, D4-B3's harness is needed by D8-B2, D4-B4 must precede the spec). If B runs over, D4-B3 moves to D5 morning.*
 
 ### D5 · Fri 27.11 — Second migration, categories, products, production pipeline · **G1 (ERD freeze)**
 - [ ] **D5-B0** (B · 3h) **Second migration** per `APPLIED.md` §4 · D5-B0: `supplier_agreements` (+ policies, column grant, tests), `payments` + `refunded_cents`, `payment_events`, `product_stock` (+ read policy, worker write), `app.system_cancel_sub_order()` (+ tests). **ERD freeze D5 EOD. → G1**
 - [ ] **D5-B2** (B · 2.5h) Category services + attribute definitions (read from the seed, inherited down the tree, Zod schema generated from them).
-- [ ] **D5-B3** (B · 2.5h) Product CRUD services (draft / active / archived, SKU unique per supplier); storage module (save / read / delete on the media volume). *(Image upload route → D6-B0.)*
-- [ ] **D5-A1** (A · 3h) **CD production half:** approval gate, `deploy.sh production`, pre-deploy `pg_dump`, health gate (Postgres + migration version; Meilisearch, Mailpit and the worker reported as "degraded" but not blocking), automatic release tag; `horeca-production` Compose project + `/opt/horeca/production/.env` (Mailpit UI at `/_mail/` behind basic auth); production Nginx site on plain `listen <SERVER_TAILSCALE_IP>:8081;` (the `default_server` for that address:port already lives in the staging site); nightly `pg_dump` + media-archive cron; **one restore of a pre-deploy dump into a scratch container** (three logins, grants and the pg-boss schema must come back). **Manual rollback** = re-run the deploy with the previous SHA.
+- [ ] **D5-B3** (B · 3.5h) *(013 +1h)* Product CRUD services (draft / active / archived, SKU unique per supplier); **storage module on the S3 API** (decision 013: `put`, `get` (stream), `delete`, `head`, `list`; standard S3 client library at an exact pinned version — ask before adding it; `S3_*` variables in `src/env.core.ts`, `MEDIA_DIR` removed from env, `.env.example` and the Dockerfile); **Garage container in the integration setup** (Testcontainers; image read from `docker-compose.dev.yml` like Postgres, same `deploy/garage/garage.toml` and setup steps). *(Image upload route → D6-B0.)*
+- [ ] **D5-A1** (A · 3h) **CD production half:** approval gate, `deploy.sh production`, pre-deploy `pg_dump`, health gate (Postgres + migration version; Meilisearch, Garage, Mailpit and the worker reported as "degraded" but not blocking), automatic release tag; `horeca-production` Compose project + `/opt/horeca/production/.env` (Mailpit UI at `/_mail/` behind basic auth); production Nginx site on plain `listen <SERVER_TAILSCALE_IP>:8081;` (the `default_server` for that address:port already lives in the staging site); nightly `pg_dump` cron (media backup → D5-A5); **one restore of a pre-deploy dump into a scratch container** (three logins, grants and the pg-boss schema must come back). **Manual rollback** = re-run the deploy with the previous SHA.
+- [ ] **D5-A5** (A · 1.5h) *(013)* **Garage on the server**, with D5-A1: a `garage` service in `deploy/compose.yml` for staging and production (no `ports:`, `mem_limit` ≈ 128m, data + meta volumes, `deploy/garage/garage.toml`); `scripts/garage-setup.sh` run once per environment (`COMPOSE_FILE` + `COMPOSE_PROJECT_NAME`); S3 + Garage variables in both `/opt/horeca/<env>/.env` and `deploy/env.staging.example`; the media volume removed from web / worker; `backup.sh`: media as an S3-API copy (`rclone sync` in a one-off container → `/var/backups/horeca/<env>/media/`) instead of a volume archive; README image / deploy-file rows updated. **Must be on staging before D5-B3 merges** — once `env.core.ts` requires the S3 variables, the web refuses to boot without them.
+- [ ] **D4-A2** (A · 2h) *(moved from D4 — 013; do it first, D5-A2 needs OrgBadge, D6-A1 needs DataTable)* Shared UI: shadcn components, DataTable wrapper, MoneyText, StatusBadge, OrgBadge; `error.tsx` / `not-found.tsx` mapped to typed domain errors.
 - [ ] **D5-A2** (A · 1h) Forgot / reset password UI; org switcher + org badge; route guards per org type (layouts + `proxy.ts`); catalogue for buyers only.
 - [ ] **D5-A3** (A · 1.5h) Company profile pages (buyer locations, supplier bank details). *("Create supplier" form → D16-A0, with its domain task D16-B0.)*
-- [ ] **D5-A4** (A · 1h) **Test PDF on staging:** render a one-page PDF with Playwright in the worker container (č ć š ž đ, within `mem_limit`). If it fails, switch to a PDF library now, not on D13.
-- *A ≈ 6.5h, B ≈ 8h.*
+- *A ≈ 9h (+1.5h D5-A5, +2h D4-A2, −1h D5-A4 → D6; 013 — 0.5h over, accepted), B ≈ 9h (D5-B3 +1h; 013).*
 
 ### D6 · Sat 28.11 — Images, CSV import
 - [ ] **D6-B0** (B · 1h) Image upload route handler (5 MB, magic bytes, random file names) — moved from D5-B3; used by D6-A2.
-- [ ] **D6-B1** (B · 2h) Image job: 3 WebP sizes 320 / 640 / 1280 (sharp); media route handler (login required, `Cache-Control: private, max-age=…, immutable`).
+- [ ] **D6-B1** (B · 2.5h) *(013 +0.5h)* Image job **via S3**: reads the original from the bucket, writes the 3 WebP sizes 320 / 640 / 1280 (sharp) back; media route handler streams from S3 (login required, `Cache-Control: private, max-age=…, immutable`).
 - [ ] **D6-B2** (B · 4h) CSV import job: streaming parse, row validation, report, confirm → upsert by (supplier, SKU); decimal comma only in `;` files; **stuck-import recovery** in the supplier's own context (the import job runs as `horeca_app` with the supplier actor and sets `failed` on error; a running import older than 30 min is treated as failed when the supplier opens imports or starts a new one; Cancel action).
 - [ ] **D6-B3** (B · 1h) React Email base layout + password-reset e-mail wired to Better Auth (the reset pages are D5-A2; test end to end in Mailpit). *(moved from D2-B4)*
 - [ ] **D6-A1** (A · 1.5h) Supplier "My products" table. *(Admin category management → D14-A3; categories come from the seed until then.)*
 - [ ] **D6-A2** (A · 3h) Product form generated from the attribute schema; FileDropzone + image upload with progress; `srcset` image component.
 - [ ] **D6-A3** (A · 3h) **`mock-services` app** — fourth entry point of the existing image, its own container per environment, state in memory seeded on start from the catalogue data — with the **supplier stock API**: `GET /suppliers/{id}/stock?skus=…`, `POST /suppliers/{id}/orders` (idempotent by sub-order ID; decrements stock, may reject lines); behaviours per supplier: normal · down (503) · some SKUs out of stock (decision 012 §7–§8).
-- *A ≈ 7.5h, B ≈ 8h.*
+- [ ] **D5-A4** (A · 1h) *(moved from D5 — 013)* **Test PDF on staging:** render a one-page PDF with Playwright in the worker container (č ć š ž đ, within `mem_limit`). If it fails, switch to a PDF library now, not on D13.
+- *A ≈ 8.5h (+1h D5-A4; 013), B ≈ 8.5h (D6-B1 +0.5h; 013).*
 
 ### D7 · Sun 29.11 — Search, catalogue
 - [ ] **D7-B1** (B · 3h) Meilisearch client + index settings (filterable / sortable attributes, typo tolerance off for SKU/GTIN; test "hladjenje" vs "hlađenje"), sync jobs (enqueued in the same transaction), visibility rules, `pnpm search:reindex`; visibility tests.
@@ -155,7 +159,7 @@ Whatever is not finished at G4 goes into README → Known limitations. If someth
 - [ ] **D8-B4** (B · 4h) **Contracts:** domain services `agreement.request` / `.accept` / `.reject` / `.end` / `.view`, policies + authorization-matrix entries, e-mails (request → supplier; decision → buyer).
 - [ ] **D8-A1** (A · 4.5h) *(012 est.)* Cart UI: CartSupplierGroup **with the per-supplier mode choice** (contract active → "Order directly under our contract" or "Pay by card"; no contract → "Pay by card" + "Request a contract"; requested → "Pay by card"), QuantityStepper, header cart count, empty states.
 - [ ] **D8-A2** (A · 2h) Order e-mail templates (buyer confirmation, supplier new sub-order) in React Email.
-- [ ] **D8-A3** (A · 2h) **Generated seed** (moved from D8-B3; until the scraped data arrives on D13-A3): CSVs with realistic products for the 3 seeded suppliers (incl. č ć š ž đ), **dummy images per category** copied into the media folder, one CSV with deliberate bad rows; stock values for `mock-services` come from the same data.
+- [ ] **D8-A3** (A · 2h) **Generated seed** (moved from D8-B3; until the scraped data arrives on D13-A3): CSVs with realistic products for the 3 seeded suppliers (incl. č ć š ž đ), **dummy images per category** uploaded to the bucket (through the storage module), one CSV with deliberate bad rows; stock values for `mock-services` come from the same data.
 - *A ≈ 8.5h, B ≈ 8.5h.*
 
 ### D9 · Tue 01.12 — Checkout
@@ -194,7 +198,7 @@ Whatever is not finished at G4 goes into README → Known limitations. If someth
 - *A ≈ 8h, B ≈ 8h.*
 
 ### D13 · Sat 05.12 — Pro-forma PDF, admin · DoD on staging
-- [ ] **D13-B1** (B · 3.5h) Invoice render job **for the platform part only** (orders without a platform part get none) (Playwright in the worker, from `content_snapshot`, stored on the media volume, idempotent); download route handler (buyer + platform only) that **re-enqueues the job when the file is missing**; invoice link in the order e-mail and order detail.
+- [ ] **D13-B1** (B · 3.5h) Invoice render job **for the platform part only** (orders without a platform part get none) (Playwright in the worker, from `content_snapshot`, stored in S3 as `invoices/<order id>.pdf`, idempotent); download route handler (buyer + platform only) that **re-enqueues the job when the file is missing**; invoice link in the order e-mail and order detail.
 - [ ] **D13-B2** (B · 1h) Tests: re-run job is a no-op, supplier cannot download (404).
 - [ ] **D13-B3** (B · 1.5h) E2E Definition-of-Done suite (incl. supplier B → supplier A's URL → not found).
 - [ ] **D13-A3** (A · 1h) Scraper finish (last hour of the 4h time-box): switch the seed to `.seed-private/`, run it locally, copy the data to the server by hand for the D14 production seed.
