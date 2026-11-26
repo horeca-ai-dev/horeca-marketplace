@@ -121,3 +121,113 @@ export function payableCents(
     throw new RangeError("commission cannot exceed the sub-order gross");
   return subOrderGrossCents - commission;
 }
+
+// ── Purchase modes, ledger entries and payment status (decision 012, D4-B1) ─────────────────────────────
+
+export type PurchaseMode = "direct" | "platform";
+
+/** The four ledger entry types a sub-order produces itself (payout, adjustment, commission_payment are admin actions). */
+export type SubOrderLedgerType =
+  "sale" | "commission" | "sale_reversal" | "commission_reversal";
+
+/** One ledger row to insert. Sign: + = the platform owes the supplier more (CLAUDE.md rule 9). */
+export type LedgerLine = { type: SubOrderLedgerType; amountCents: number };
+
+export type SubOrderMoney = {
+  mode: PurchaseMode;
+  grossCents: Cents;
+  commissionCents: Cents;
+};
+
+function assertSubOrderMoney(s: SubOrderMoney): void {
+  assertCents(s.grossCents, "grossCents");
+  assertCents(s.commissionCents, "commissionCents");
+  if (s.commissionCents > s.grossCents)
+    throw new RangeError("commission cannot exceed the sub-order gross");
+}
+
+/**
+ * Entries written when a sub-order is created (checkout).
+ * platform: sale +gross and commission −commission (the platform owes gross − commission);
+ * direct:   commission −commission only (the supplier received the money itself and now owes the commission).
+ * The commission row is written even when it is 0 (a 0 bps override): the database allows `commission ≤ 0`, and
+ * "every sub-order has a commission entry" keeps the ledger uniform. `sale` must be > 0, so a free order writes none.
+ */
+export function checkoutLedgerEntries(s: SubOrderMoney): LedgerLine[] {
+  assertSubOrderMoney(s);
+  const lines: LedgerLine[] = [];
+  if (s.mode === "platform" && s.grossCents > 0)
+    lines.push({ type: "sale", amountCents: s.grossCents });
+  lines.push({ type: "commission", amountCents: -s.commissionCents });
+  return lines;
+}
+
+/**
+ * Entries written when a sub-order is cancelled: the exact opposite of its checkout entries, so they sum to 0.
+ * direct mode never gets a `sale_reversal` — there was no `sale` to reverse.
+ */
+export function cancellationLedgerEntries(s: SubOrderMoney): LedgerLine[] {
+  assertSubOrderMoney(s);
+  const lines: LedgerLine[] = [];
+  if (s.mode === "platform" && s.grossCents > 0)
+    lines.push({ type: "sale_reversal", amountCents: -s.grossCents });
+  lines.push({
+    type: "commission_reversal",
+    amountCents: s.commissionCents,
+  });
+  return lines;
+}
+
+/** Balance = Σ entries. It MAY be negative (a direct-mode supplier owes its commission). */
+export function ledgerBalance(
+  entries: readonly { amountCents: number }[],
+): number {
+  let sum = 0;
+  for (const e of entries) {
+    if (!Number.isSafeInteger(e.amountCents))
+      throw new RangeError(
+        `ledger amount must be an integer, got ${e.amountCents}`,
+      );
+    sum += e.amountCents;
+    if (!Number.isSafeInteger(sum))
+      throw new RangeError("Ledger balance exceeds the safe integer range");
+  }
+  return sum;
+}
+
+/** What the buyer owes the platform by card: gross of the NON-cancelled platform sub-orders only. */
+export function amountDueCents(
+  subOrders: readonly {
+    mode: PurchaseMode;
+    cancelled: boolean;
+    grossCents: Cents;
+  }[],
+): Cents {
+  let due = ZERO;
+  for (const s of subOrders) {
+    assertCents(s.grossCents, "grossCents");
+    if (s.mode === "platform" && !s.cancelled) due += BigInt(s.grossCents);
+  }
+  return toSafeNumber(due);
+}
+
+export type OrderPaymentStatus =
+  "unpaid" | "paid" | "refund_due" | "not_applicable";
+
+/**
+ * `orders.payment_status` (APPLIED.md §4 · D4-B1). `paidCents` = Σ receipts − Σ refunds.
+ *   paid > due → refund_due · due = 0 → not_applicable · paid = due → paid · otherwise unpaid.
+ * The order of the checks matters: with due = 0 and paid > 0 (everything cancelled after payment) the buyer is
+ * owed a refund, so `refund_due` wins over `not_applicable`.
+ */
+export function paymentStatus(
+  dueCents: Cents,
+  paidCents: Cents,
+): OrderPaymentStatus {
+  assertCents(dueCents, "dueCents");
+  assertCents(paidCents, "paidCents");
+  if (paidCents > dueCents) return "refund_due";
+  if (dueCents === 0) return "not_applicable";
+  if (paidCents === dueCents) return "paid";
+  return "unpaid";
+}
