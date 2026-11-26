@@ -107,9 +107,15 @@ jobs:
 
       # Same services and the same init script (three logins) as on our laptops. The integration tests
       # below do not use this Postgres — Testcontainers starts a fresh one — but Mailpit is needed.
+      # Compose interpolates the whole file, so Garage's required secrets (empty in .env.example on
+      # purpose, decision 013) must be set even though Garage is not started here.
       - name: Start Postgres and Mailpit
         run: |
           cp .env.example .env
+          {
+            echo "GARAGE_RPC_SECRET=$(openssl rand -hex 32)"
+            echo "GARAGE_ADMIN_TOKEN=$(openssl rand -base64 32)"
+          } >> .env
           docker compose -f docker-compose.dev.yml up -d --wait postgres mailpit
 
       - name: Migration files are consistent
