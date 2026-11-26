@@ -22,10 +22,10 @@ is a one-column comparison and a supplier never reads the buyer's `orders` row (
 | Diagram | Status |
 |---|---|
 | [`01-erd-complete`](../diagrams/01-erd-complete.png) — all tables | Pre-012. Needs `sub_orders.mode`, `supplier_submission`, `commission_payment`, `supplier_agreements`, `payments`, `payment_events`, `product_stock`; no `payment_method`, no `invoice_counters`, no `thumb_key`. Refreshed in D14-B3 |
-| [`08-erd-catalogue`](../diagrams/08-erd-catalogue.mmd), [`09-erd-orders`](../diagrams/09-erd-orders.mmd), [`11-state-suborder`](../diagrams/11-state-suborder.mmd), [`12-checkout-sequence`](../diagrams/12-checkout-sequence.mmd) | **Updated 26.11 (D4-B4):** the `.mmd` sources match migrations 0003–0005 and decision 012. The PNG renderings of these four are re-rendered separately |
+| [`08-erd-catalogue`](../diagrams/08-erd-catalogue.mmd), [`09-erd-orders`](../diagrams/09-erd-orders.mmd), [`11-state-suborder`](../diagrams/11-state-suborder.mmd), [`12-checkout-sequence`](../diagrams/12-checkout-sequence.mmd) | **Updated 26.11 (D4-B4):** the `.mmd` sources match migrations 0003–0005 and decision 012, and the PNGs were re-rendered from them |
 
-> **Honest note:** until the PNGs are re-rendered and `01-erd-complete` is refreshed (D14-B3), a picture and the text
-> below can disagree. The text of this file, the `.mmd` sources and `APPLIED.md` are right; the pictures lag.
+> **Honest note:** until `01-erd-complete` is refreshed (D14-B3), that one picture and the text below can disagree.
+> The text of this file, the `.mmd` sources and `APPLIED.md` are right; the old overview picture lags.
 
 ## 6.2 Entity descriptions
 

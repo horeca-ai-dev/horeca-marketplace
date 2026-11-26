@@ -2,7 +2,7 @@
 %% (buyer context). Side effects are pg-boss jobs enqueued INSIDE the same transaction.
 %% Updated D4-B4 (26.11): purchase mode per supplier group (no paymentMethod), stock check before the transaction,
 %% contract check for direct, ledger and pro-forma per mode, card payment and supplier submission after commit.
-%% The gateway and supplier-API steps (mock-services) are built in D9-D10; the database steps follow migrations 0004-0005.
+%% The gateway and supplier-API steps (mock-services) are built in D9-D10, the database steps follow migrations 0004-0005.
 sequenceDiagram
   autonumber
   actor B as Buyer (owner or member)
@@ -28,7 +28,7 @@ sequenceDiagram
   else new checkout
     D->>PG: SELECT cart_items ... FOR UPDATE (the only lock: FOR SHARE on products returns 0 rows for a buyer)
     D->>PG: SELECT products, supplier org_profiles, supplier_agreements
-    D->>D: revalidate every line: active, supplier approved, min qty + step, PricingResolver price = price seen, buyer tax ID differs from supplier tax ID; mode direct: agreement with that supplier is active
+    D->>D: revalidate every line: active, supplier approved, min qty + step, PricingResolver price = price seen, buyer tax ID differs from supplier tax ID, and for mode direct the agreement with that supplier is active
     alt anything changed
       D-->>SA: Conflict with changedLines (nothing written)
     else all valid
@@ -45,7 +45,7 @@ sequenceDiagram
   end
   SA->>PG: COMMIT (rollback on any error: nothing persisted, no job queued)
   opt platform part exists
-    SA->>GW: createPayment for the platform part (after commit, 2-3 s timeout; on failure the order page offers Pay now)
+    SA->>GW: createPayment for the platform part (after commit, 2-3 s timeout, on failure the order page offers Pay now)
     GW-->>SA: hosted card page URL
   end
   SA-->>UI: ok + orderId (+ card page URL), or error code + message + changedLines
