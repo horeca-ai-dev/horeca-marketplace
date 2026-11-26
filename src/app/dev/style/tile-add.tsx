@@ -38,7 +38,7 @@ export function TileAdd({ disabled = false }: { disabled?: boolean }) {
       <output
         aria-live="polite"
         aria-label="Količina u korpi"
-        className="flex-1 text-center text-sm font-medium tabular-nums"
+        className="flex-1 text-center text-sm font-medium"
       >
         {qty} kom
       </output>
