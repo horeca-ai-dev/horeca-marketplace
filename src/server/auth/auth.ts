@@ -12,7 +12,8 @@
  *   - REGISTRATION_OPEN=false refuses sign-up over HTTP; server-side calls (seed) still work
  *   - trustedOrigins = both domains (+ APP_URL locally); the Origin check stays on in every
  *     environment, tests included
- *   - rate limiter: 5 sign-in attempts per minute per client IP; the client IP comes from X-Real-IP, which our Nginx sets from the real client
+ *   - rate limiter: on whenever APP_ENV is staging/production (isRateLimitEnabled), 5 sign-in attempts
+ *     per minute per client IP; the client IP comes from X-Real-IP, which our Nginx sets from the real client
  *     address (it trusts X-Forwarded-For only from the friend's proxy) — never the raw
  *     X-Forwarded-For, whose first entry the client can forge
  *   - a new session starts in the user's organization (databaseHooks.session.create)
@@ -29,6 +30,7 @@ import { env } from "@/env.core";
 import { appDb } from "@/server/db/client";
 import { defaultOrganizationId } from "@/server/db/queries/membership";
 import * as schema from "@/server/db/schema";
+import { getLogger } from "@/server/logger";
 
 /** The only organization endpoints reachable at all: read your own organization, switch between your own. */
 export const ORGANIZATION_ENDPOINTS_ALLOWED: readonly string[] = [
@@ -39,8 +41,28 @@ export const ORGANIZATION_ENDPOINTS_ALLOWED: readonly string[] = [
   "/organization/get-active-member-role",
 ];
 
+const log = getLogger("auth");
+
+/**
+ * The limiter is ON on staging and production and OFF only for local work and tests (APP_ENV=local).
+ * We decide this ourselves instead of leaving it to Better Auth's default, which looks at NODE_ENV:
+ * a staging container with the wrong NODE_ENV would silently run without a limiter (G0 check).
+ */
+export function isRateLimitEnabled(
+  appEnv: "local" | "staging" | "production",
+  override?: boolean,
+): boolean {
+  return override ?? appEnv !== "local";
+}
+
 /** Builds the instance. App code calls getAuth(); only src/server/auth/cli.ts calls this directly. */
 export function createAuth(options: { rateLimit?: boolean } = {}) {
+  const rateLimitEnabled = isRateLimitEnabled(env.APP_ENV, options.rateLimit);
+  // One line at startup: the first thing to read when the limiter "does not work" on a server.
+  log.info(
+    { rateLimit: rateLimitEnabled, appEnv: env.APP_ENV, ipHeader: "x-real-ip" },
+    "auth ready",
+  );
   return betterAuth({
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
@@ -58,11 +80,11 @@ export function createAuth(options: { rateLimit?: boolean } = {}) {
       // Set to false so tests exercise exactly what runs on the server.
       disableOriginCheck: false,
     },
-    // Built-in limiter, per client IP (from X-Real-IP above). On by default in production only
+    // Built-in limiter, per client IP (from X-Real-IP above). Enabled by isRateLimitEnabled() above
     // (tests switch it on through createAuth({ rateLimit: true })). Without a client IP Better Auth
     // falls back to ONE shared bucket for everybody — so Nginx must set X-Real-IP.
     rateLimit: {
-      enabled: options.rateLimit,
+      enabled: rateLimitEnabled,
       // The one explicit rule (APPLIED.md §9.7): 5 sign-in attempts per minute per IP. Other
       // sign-in / sign-up paths keep Better Auth's default 3 per 10 s.
       customRules: { "/sign-in/email": { window: 60, max: 5 } },
