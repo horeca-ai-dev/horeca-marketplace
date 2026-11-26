@@ -1,4 +1,8 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+// Loads src/i18n/request.ts (locale, time zone, messages) for every request.
+const withNextIntl = createNextIntlPlugin();
 
 const nextConfig: NextConfig = {
   // CLAUDE.md: Cache Components off — every page is dynamic.
@@ -24,4 +28,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);
