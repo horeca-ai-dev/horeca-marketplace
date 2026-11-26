@@ -6,14 +6,10 @@
  * components (Button, StatusBadge, DataTable, ProductCard, CartSupplierGroup) are built in D4-A1 /
  * D4-A2 and must look like this. The Montenegrin samples are written out here on purpose — next-intl
  * arrives with D3-A4, and real screens take every string from its catalogue.
- *
- * ?font=schibsted | hanken renders the whole page in that candidate.
  */
-import type { CSSProperties, ReactNode } from "react";
-import Link from "next/link";
+import type { ReactNode } from "react";
 import { CONTRAST_PAIRS, contrastRatio } from "@/lib/design/contrast";
 import { COLOR_TOKENS, tokenHex } from "@/lib/design/tokens";
-import { CANDIDATES, type CandidateKey } from "./fonts";
 import { TileAdd } from "./tile-add";
 
 const SAMPLE = "Profesionalni frižider za restoran — 1.234,56 €";
@@ -24,11 +20,6 @@ const PRICES = [
   "78,00 €",
   "4.107,41 €",
 ];
-
-/** Sets the one font variable the tokens read (globals.css → --font-sans). */
-function fontStyle(key: CandidateKey): CSSProperties {
-  return { "--font-app": CANDIDATES[key].fontFamily } as CSSProperties;
-}
 
 function Section({
   title,
@@ -329,42 +320,19 @@ function ModeOption({
   );
 }
 
-export default async function StylePreviewPage({
-  searchParams,
-}: PageProps<"/dev/style">) {
-  const { font } = await searchParams;
-  const active: CandidateKey = font === "hanken" ? "hanken" : "schibsted";
-
+export default function StylePreviewPage() {
   return (
-    <main
-      style={fontStyle(active)}
-      className="mx-auto w-full max-w-[1200px] px-4 pb-16 font-sans md:px-8"
-    >
+    <main className="mx-auto w-full max-w-[1200px] px-4 pb-16 font-sans md:px-8">
       <header className="py-8">
         <h1 className="text-2xl">Design direction — preview</h1>
         <p className="mt-1 max-w-[70ch] text-sm text-muted-foreground">
           Tokens from globals.css, rules from DESIGN.md. Not a screen. This page
           is rendered in{" "}
           <strong className="font-semibold text-foreground">
-            {CANDIDATES[active].label}
+            Schibsted Grotesk
           </strong>
-          .
+          , loaded from the local files in src/app/fonts.
         </p>
-        <nav
-          aria-label="Typeface for this page"
-          className="mt-4 flex flex-wrap gap-2"
-        >
-          {(Object.keys(CANDIDATES) as CandidateKey[]).map((key) => (
-            <Link
-              key={key}
-              href={`/dev/style?font=${key}`}
-              aria-current={key === active ? "page" : undefined}
-              className={`${BTN_SECONDARY} aria-[current=page]:border-primary aria-[current=page]:bg-selected`}
-            >
-              {CANDIDATES[key].label}
-            </Link>
-          ))}
-        </nav>
       </header>
 
       <Section
@@ -451,60 +419,46 @@ export default async function StylePreviewPage({
 
       <Section
         title="Typeface — Schibsted Grotesk chosen"
-        note="Same sample, same sizes, side by side. Pick by looking; the links at the top render the whole page in either one."
+        note="Variable font, weights 400–600 in use. Its digits are proportional by default; tabular-nums (the tnum feature) makes them equal width."
       >
-        <div className="grid gap-8 lg:grid-cols-2">
-          {(Object.keys(CANDIDATES) as CandidateKey[]).map((key) => (
-            <div
-              key={key}
-              style={fontStyle(key)}
-              className="rounded-md border border-border p-6 font-sans"
-            >
-              <p className="text-sm text-muted-foreground">
-                {CANDIDATES[key].label}
+        <div className="max-w-[640px]">
+          <p className="mt-3 text-2xl font-semibold">{SAMPLE}</p>
+          <p className="mt-3 text-base">{SAMPLE}</p>
+          <p className="mt-3 text-base">
+            č ć š ž đ · Č Ć Š Ž Đ · Đurđevića Tara, Žabljak, Šavnik, Čanj,
+            Nikšić
+          </p>
+          <p className="mt-3 text-sm">
+            <span className="font-normal">Regular 400</span> ·{" "}
+            <span className="font-medium">Medium 500</span> ·{" "}
+            <span className="font-semibold">Semibold 600</span>
+          </p>
+          <div className="mt-6 grid grid-cols-2 gap-6">
+            <div>
+              <p className="text-xs text-muted-foreground">
+                tabular-nums — amount columns
               </p>
-              <p className="mt-3 text-2xl font-semibold">{SAMPLE}</p>
-              <p className="mt-3 text-base">{SAMPLE}</p>
-              <p className="mt-3 text-base">
-                č ć š ž đ · Č Ć Š Ž Đ · Đurđevića Tara, Žabljak, Šavnik, Čanj,
-                Nikšić
-              </p>
-              <p className="mt-3 text-sm">
-                <span className="font-normal">Regular 400</span> ·{" "}
-                <span className="font-medium">Medium 500</span> ·{" "}
-                <span className="font-semibold">Semibold 600</span>
-              </p>
-              <div className="mt-6 grid grid-cols-2 gap-6">
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    tabular-nums — amount columns
-                  </p>
-                  <ul className="mt-2 border-t border-border text-right text-base tabular-nums">
-                    {PRICES.map((p) => (
-                      <li key={p} className="border-b border-border py-1.5">
-                        {p}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    proportional — everywhere else
-                  </p>
-                  <ul className="mt-2 border-t border-border text-right text-base">
-                    {PRICES.map((p) => (
-                      <li key={p} className="border-b border-border py-1.5">
-                        {p}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-              <p className="mt-4 text-xs text-muted-foreground">
-                {CANDIDATES[key].note}
-              </p>
+              <ul className="mt-2 border-t border-border text-right text-base tabular-nums">
+                {PRICES.map((p) => (
+                  <li key={p} className="border-b border-border py-1.5">
+                    {p}
+                  </li>
+                ))}
+              </ul>
             </div>
-          ))}
+            <div>
+              <p className="text-xs text-muted-foreground">
+                proportional — everywhere else
+              </p>
+              <ul className="mt-2 border-t border-border text-right text-base">
+                {PRICES.map((p) => (
+                  <li key={p} className="border-b border-border py-1.5">
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
         </div>
       </Section>
 

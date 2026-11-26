@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "tailwindcss" source("..");
 
 /*
  * Design tokens (D4-A0). Names follow shadcn/ui where it has one (background, foreground,
@@ -48,6 +48,9 @@
   --progress-bg: #e3ecf1;
   --progress-text: #2f4f63;
 
+  /* The typeface: two subset files of one family, joined here (src/app/fonts.ts explains the order). */
+  --font-app: var(--font-app-latin-ext), var(--font-app-latin);
+
   /* Motion: nothing is slower than 200 ms. */
   --motion-fast: 120ms;
   --motion-base: 200ms;
@@ -90,7 +93,7 @@
   --color-progress-bg: var(--progress-bg);
   --color-progress-text: var(--progress-text);
 
-  /* One family. --font-app is set by next/font (root layout from D4-A1; /dev/style sets it per sample). */
+  /* One family. --font-app is built in :root from the two next/font/local variables (src/app/fonts.ts). */
   --font-sans:
     var(--font-app, system-ui), system-ui, "Segoe UI", Arial, sans-serif;
 
