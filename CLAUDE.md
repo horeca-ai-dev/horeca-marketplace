@@ -49,7 +49,8 @@ Keep this section accurate — update it in the same PR that changes a command.
 ```
 src/
   app/              # Next.js routes & UI: (public)/, buyer/, supplier/, admin/, api/
-  components/       # ui/ (shadcn primitives), domain/ (ProductCard, MoneyText…)
+  components/       # ui/ (shadcn primitives on our tokens + Icon), domain/ (shell/, ProductCard, MoneyText…)
+  i18n/             # next-intl: config.ts (locale sr-Latn-ME, time zone), request.ts, typed message keys
   server/
     domain/         # services, policy, money, state machines — FRAMEWORK-FREE
     db/             # Drizzle schema, migrations, withTx(), scoped query helpers
@@ -57,10 +58,11 @@ src/
     search/         # Meilisearch client + searchProducts()
     email/          # sendEmail() adapter (SMTP) + React Email templates
     storage/        # put / get / delete / head / list via the S3 API (the only place that touches media)
-  lib/              # Zod schemas shared by UI & domain, formatting helpers
+  lib/              # Zod schemas shared by UI & domain, format.ts (money / date / time for display), auth-client.ts
   env.core.ts       # the ONLY place that reads process.env (Zod, assertEnv); plain-Node code imports this
   env.ts            # server-only re-export of env.core — Next.js code (src/app, src/components) imports this
   worker.ts         # worker entry point
+messages/           # next-intl catalogues: sr-Latn-ME.json (complete), en.json (prepared, empty)
 ```
 
 ## Architecture rules (non-negotiable)
@@ -80,7 +82,7 @@ src/
 14. **Configuration:** read env **only** through `src/env.ts` (Next.js code; `server-only`) or `src/env.core.ts` (code that the worker, migrate, drizzle-kit or Vitest also load) — both Zod-validated; each entry point calls `assertEnv(role)` at startup. **Never introduce `NEXT_PUBLIC_*` variables** — they are frozen at build time and we build one image for staging and production. If the browser needs a value, pass it from a Server Component.
 15. **Migrations:** Drizzle. Never edit a merged migration — add a new one. Production deploys take a `pg_dump` first; rollback is manual (redeploy the previous SHA, restore the dump if a migration broke data) — so migrations do **not** need to be backward-compatible. Migration conflict after rebase: delete your generated migration, regenerate, commit. ERD changes after gate G1 need an ADR. The **first** migration only creates the extension `ltree` (`pg_trgm` is not used — search is Meilisearch); RLS policies, roles' privileges and triggers are **SQL migrations in the same chain** (never a file re-run on every deploy) — a policy change is a new migration. Every new table gets RLS policies, a matrix entry and RLS tests in the same PR.
 16. **Errors:** domain code throws typed errors (`NotFound`, `Forbidden`, `Conflict`, `Validation`). Server Actions return `{ ok: false, code, message, fieldErrors? }`; route handlers return `application/problem+json`. Never swallow errors; log with pino; never send stack traces or internal IDs to the client.
-17. **Dependencies:** never add one without asking, saying why, and checking it is maintained. *`next-intl` is already decided by decision 012 (no need to ask again) — pin an exact version that is at least two weeks old when D3-A4 adds it.*
+17. **Dependencies:** never add one without asking, saying why, and checking it is maintained. *`next-intl` (decision 012) is pinned at **4.15.1**; the install scripts of its transitive `@swc/core` and `@parcel/watcher` stay disabled (`pnpm-workspace.yaml`). shadcn/ui components are added by copying the source into `src/components/ui` and rewriting it onto our token names — never `shadcn init`, which writes its own theme into `globals.css`.*
 
 ## Infrastructure rules
 - **Traffic path:** internet → friend's public proxy (TLS, certbot) → Tailscale → our Nginx (listens on the Tailscale address only, port `8081`; both environments split by `server_name`) → app on `127.0.0.1` (staging `3101`, production `3102` — `WEB_PORT`). Our Nginx trusts `X-Forwarded-For` only from the friend's Tailscale IP (`set_real_ip_from`) and passes `X-Forwarded-Proto: https` through unchanged — never overwrite it, or auth cookies break.

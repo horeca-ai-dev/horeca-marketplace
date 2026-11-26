@@ -82,7 +82,7 @@ Staging shows a thin full-width banner at the top in the attention tone: "STAGIN
 ## Typography
 - **One grotesque sans family for everything: Schibsted Grotesk** (SIL Open Font License) — UI, tables, e-mails, invoice PDF. Chosen on 26.11.2026 on `/dev/style` over Hanken Grotesk.
 - **Verified against the font files (26.11.2026):** contains **č ć š ž đ / Č Ć Š Ž Đ** (`latin-ext`) and **€** (`latin`); weight axis 400–900. Its digits are **proportional by default**; the `tnum` feature (`tabular-nums`) makes them equal width (1300 / 2048 units at weights 400–700) — noticeably wider, which is why tabular figures are limited to columns (rule below).
-- **Loading:** the font is **committed as local files** (variable woff2, `latin` + `latin-ext`, with its **OFL licence file**) under `src/app/fonts/` and loaded with **`next/font/local`** in the root layout (task D4-A1), exposed as `--font-app`. Builds never download fonts; the same files are embedded in the invoice PDF. (Until D4-A1, `/dev/style` alone loads it with `next/font/google`, next to the rejected candidate for comparison.) Fallback: system-ui, Segoe UI, Arial.
+- **Loading:** the font is **committed as local files** (variable woff2, `latin` + `latin-ext`, with its **OFL licence file**) under `src/app/fonts/` and loaded with **`next/font/local`** in the root layout (`src/app/fonts.ts`: one `@font-face` per subset file, each with its `unicode-range`), exposed as `--font-app`. Builds never download fonts; the same files are embedded in the invoice PDF. Fallback: system-ui, Segoe UI, Arial.
 - **Scale — six steps, nothing else** (px size / line height):
 
   | Step | Size | Weight | Utility |
@@ -115,7 +115,8 @@ Staging shows a thin full-width banner at the top in the attention tone: "STAGIN
 - Breakpoints: `sm 360`, `md 768`, `lg 1024`, `xl 1280`. Container max 1200 px, side padding 16 px (32 px from `md`).
 - **Header (all areas):** logo · search (buyers only — the catalogue is for buyers) · cart with count (buyer) · **org badge + org switcher** · account menu.
 - **Org switcher:** lists the user's organizations with their type label; switching is an explicit action that redirects to that organization's dashboard (`/buyer`, `/supplier`, `/admin`). Hidden when the user has one organization.
-- Supplier / admin: left sidebar (collapses to a top menu below 1024).
+- **Navigation:** one list per area (`src/components/domain/shell/nav.ts`). Buyer: a row in the header (the left side belongs to the catalogue's filter rail), in a sheet below `md`. Supplier / admin: left sidebar on `--surface`, in a sheet below `lg` (1024). The sheet opens from a menu button at the start of the header. The active entry has `aria-current="page"`, the `--selected` tint, green text and semibold.
+- **Page header** (`PageHeader`): the one H1, an optional sentence under it, an optional action on the right; the first section starts 32 px below.
 
 ### Shopping mode (buyer: catalogue, product page, cart drawer)
 - **Catalogue:** a grid of image tiles, **2 / 3 / 4 columns** at `sm` / `md` / `xl` (1 column below 360). All state (query, filters, sort, page) in the URL.
