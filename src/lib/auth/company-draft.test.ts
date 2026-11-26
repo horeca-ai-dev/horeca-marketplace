@@ -30,6 +30,9 @@ const brokenStorage: DraftStorage = {
   },
 };
 
+const USER = "user-ana";
+const OTHER_USER = "user-marko";
+
 const company = {
   legalName: "Hotel Budva d.o.o.",
   taxId: "02345678",
@@ -43,13 +46,13 @@ const company = {
 describe("saveCompanyDraft", () => {
   it("stores the company fields and loads them back", () => {
     const storage = memoryStorage();
-    saveCompanyDraft(storage, company);
-    expect(loadCompanyDraft(storage)).toEqual(company);
+    saveCompanyDraft(storage, USER, company);
+    expect(loadCompanyDraft(storage, USER)).toEqual(company);
   });
 
   it("never stores anything but the company fields", () => {
     const storage = memoryStorage();
-    saveCompanyDraft(storage, {
+    saveCompanyDraft(storage, USER, {
       ...company,
       // What a careless caller might pass along:
       name: "Ana Anić",
@@ -58,59 +61,98 @@ describe("saveCompanyDraft", () => {
       account: { password: "long-enough-1" },
     });
     const stored = storage.items.get(COMPANY_DRAFT_KEY) ?? "";
-    expect(Object.keys(JSON.parse(stored) as object).sort()).toEqual(
-      Object.keys(company).sort(),
-    );
+    expect(JSON.parse(stored)).toEqual({ userId: USER, company });
     expect(stored).not.toContain("long-enough-1");
     expect(stored).not.toContain("ana@hotel.example");
   });
 
   it("skips values that are not text", () => {
     const storage = memoryStorage();
-    saveCompanyDraft(storage, { ...company, contactPhone: undefined });
-    expect(loadCompanyDraft(storage)).toEqual({ ...company, contactPhone: "" });
+    saveCompanyDraft(storage, USER, { ...company, contactPhone: undefined });
+    expect(loadCompanyDraft(storage, USER)).toEqual({
+      ...company,
+      contactPhone: "",
+    });
   });
 
   it("does nothing without a storage, and survives one that throws", () => {
-    expect(() => saveCompanyDraft(null, company)).not.toThrow();
-    expect(() => saveCompanyDraft(brokenStorage, company)).not.toThrow();
+    expect(() => saveCompanyDraft(null, USER, company)).not.toThrow();
+    expect(() => saveCompanyDraft(brokenStorage, USER, company)).not.toThrow();
   });
 });
 
 describe("loadCompanyDraft", () => {
   it("is null when nothing was saved", () => {
-    expect(loadCompanyDraft(memoryStorage())).toBeNull();
-    expect(loadCompanyDraft(null)).toBeNull();
-    expect(loadCompanyDraft(brokenStorage)).toBeNull();
+    expect(loadCompanyDraft(memoryStorage(), USER)).toBeNull();
+    expect(loadCompanyDraft(null, USER)).toBeNull();
+    expect(loadCompanyDraft(brokenStorage, USER)).toBeNull();
   });
 
   it("returns the values the shared schema produces (trimmed)", () => {
     const storage = memoryStorage();
-    saveCompanyDraft(storage, { ...company, city: "  Budva " });
-    expect(loadCompanyDraft(storage)?.city).toBe("Budva");
+    saveCompanyDraft(storage, USER, { ...company, city: "  Budva " });
+    expect(loadCompanyDraft(storage, USER)?.city).toBe("Budva");
   });
+
+  const stored = (company: object, userId: unknown = USER) =>
+    JSON.stringify({ userId, company });
 
   it.each([
     ["not JSON", "{oops"],
     ["not an object", JSON.stringify("text")],
-    ["a field fails the schema", JSON.stringify({ ...company, taxId: "12" })],
-    ["a field is missing", JSON.stringify({ ...company, city: undefined })],
-    ["an unknown key", JSON.stringify({ ...company, password: "secret-123" })],
+    ["a field fails the schema", stored({ ...company, taxId: "12" })],
+    ["a field is missing", stored({ ...company, city: undefined })],
+    ["an unknown company key", stored({ ...company, password: "secret-123" })],
+    [
+      "an unknown top-level key",
+      JSON.stringify({ userId: USER, company, x: 1 }),
+    ],
+    ["no owner", JSON.stringify({ company })],
+    ["an empty owner", stored(company, "")],
+    ["the old format without an owner", JSON.stringify(company)],
   ])("ignores and removes a draft when %s", (_case, raw) => {
     const storage = memoryStorage();
     storage.items.set(COMPANY_DRAFT_KEY, raw);
-    expect(loadCompanyDraft(storage)).toBeNull();
+    expect(loadCompanyDraft(storage, USER)).toBeNull();
     expect(storage.items.has(COMPANY_DRAFT_KEY)).toBe(false);
+  });
+});
+
+describe("loadCompanyDraft — whose draft it is", () => {
+  it("does not pre-fill another user's draft, and deletes it", () => {
+    const storage = memoryStorage();
+    saveCompanyDraft(storage, USER, company);
+
+    expect(loadCompanyDraft(storage, OTHER_USER)).toBeNull();
+    expect(storage.items.has(COMPANY_DRAFT_KEY)).toBe(false);
+    // Deleted for good: the owner does not get it back either.
+    expect(loadCompanyDraft(storage, USER)).toBeNull();
+  });
+
+  it("keeps the draft for its owner until it is cleared", () => {
+    const storage = memoryStorage();
+    saveCompanyDraft(storage, USER, company);
+
+    expect(loadCompanyDraft(storage, USER)).toEqual(company);
+    expect(loadCompanyDraft(storage, USER)).toEqual(company);
+  });
+
+  it("a newer draft replaces an older one from another user", () => {
+    const storage = memoryStorage();
+    saveCompanyDraft(storage, OTHER_USER, { ...company, city: "Bar" });
+    saveCompanyDraft(storage, USER, company);
+
+    expect(loadCompanyDraft(storage, USER)).toEqual(company);
   });
 });
 
 describe("clearCompanyDraft", () => {
   it("removes the draft", () => {
     const storage = memoryStorage();
-    saveCompanyDraft(storage, company);
+    saveCompanyDraft(storage, USER, company);
     clearCompanyDraft(storage);
     expect(storage.items.size).toBe(0);
-    expect(loadCompanyDraft(storage)).toBeNull();
+    expect(loadCompanyDraft(storage, USER)).toBeNull();
   });
 
   it("does nothing without a storage, and survives one that throws", () => {
