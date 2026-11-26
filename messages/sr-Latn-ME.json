@@ -1,6 +1,7 @@
 {
   "app": {
     "name": "HoReCa Marketplace",
+    "shortName": "HoReCa",
     "description": "B2B platforma za nabavku za hotele, restorane i kafiće"
   },
   "shell": {
@@ -13,7 +14,8 @@
     "accountMenu": "Nalog",
     "logout": "Odjavite se",
     "loggingOut": "Odjavljujemo Vas…",
-    "home": "{appName} — početna stranica"
+    "home": "{appName} — početna stranica",
+    "logoutFailed": "Odjava nije uspjela. Pokušajte ponovo."
   },
   "orgType": {
     "buyer": "Kupac",
