@@ -46,6 +46,110 @@
       "orders": "Porudžbine"
     }
   },
+  "auth": {
+    "backToLogin": "Nazad na prijavu",
+    "login": {
+      "title": "Prijava",
+      "submit": "Prijavite se",
+      "submitting": "Prijavljujemo Vas…",
+      "forgotPassword": "Zaboravili ste lozinku?",
+      "noAccount": "Nemate nalog?",
+      "registerLink": "Registrujte firmu",
+      "accountCreatedNotice": "Nalog je kreiran — prijavite se da završite registraciju."
+    },
+    "register": {
+      "title": "Registracija firme",
+      "description": "Registracija je za kupce: hotele, restorane i kafiće.",
+      "supplierNote": "Naloge dobavljača otvara administrator platforme.",
+      "accountLegend": "Vaš nalog",
+      "companyLegend": "Podaci o firmi",
+      "submit": "Registrujte firmu",
+      "submitting": "Registrujemo Vas…",
+      "haveAccount": "Već imate nalog?",
+      "loginLink": "Prijavite se",
+      "accountCreated": "Nalog za {email} je kreiran. Ispravite podatke o firmi i pošaljite ih ponovo.",
+      "closedTitle": "Registracija je zatvorena",
+      "closedDescription": "Trenutno ne primamo nove registracije. Ako već imate nalog, prijavite se."
+    },
+    "completeSetup": {
+      "title": "Završite podešavanje firme",
+      "description": "Vaš nalog još nije povezan sa firmom. Unesite podatke o firmi da biste nastavili.",
+      "submit": "Sačuvajte firmu",
+      "submitting": "Čuvamo podatke…"
+    },
+    "forgotPassword": {
+      "title": "Zaboravljena lozinka"
+    },
+    "fields": {
+      "name": { "label": "Ime i prezime" },
+      "email": { "label": "E-mail adresa" },
+      "password": {
+        "label": "Lozinka",
+        "help": "Najmanje 8 znakova.",
+        "show": "Prikažite lozinku",
+        "hide": "Sakrijte lozinku"
+      },
+      "legalName": { "label": "Pravni naziv firme" },
+      "taxId": { "label": "PIB", "help": "8 ili 13 cifara." },
+      "addressLine": { "label": "Adresa" },
+      "city": { "label": "Grad" },
+      "postalCode": { "label": "Poštanski broj", "help": "5 cifara." },
+      "contactEmail": { "label": "Kontakt e-mail firme" },
+      "contactPhone": { "label": "Kontakt telefon (opciono)" }
+    },
+    "errors": {
+      "summaryTitle": "Provjerite sljedeća polja:",
+      "form": {
+        "invalidCredentials": "E-mail adresa ili lozinka nisu ispravni.",
+        "rateLimited": "Previše pokušaja — pokušajte ponovo za minut.",
+        "registrationClosed": "Registracija je trenutno zatvorena.",
+        "alreadyHasCompany": "Ovaj nalog je već povezan sa firmom.",
+        "validation": "Provjerite označena polja.",
+        "generic": "Nešto nije u redu. Pokušajte ponovo."
+      },
+      "name": {
+        "required": "Unesite ime i prezime.",
+        "invalid": "Ime i prezime mora imati između 2 i 100 znakova."
+      },
+      "email": {
+        "required": "Unesite e-mail adresu.",
+        "invalid": "Unesite ispravnu e-mail adresu, na primjer ime@firma.me.",
+        "taken": "Nalog sa ovom e-mail adresom već postoji. Prijavite se."
+      },
+      "password": {
+        "required": "Unesite lozinku.",
+        "invalid": "Lozinka mora imati između 8 i 128 znakova."
+      },
+      "legalName": {
+        "required": "Unesite pravni naziv firme.",
+        "invalid": "Naziv firme mora imati između 2 i 200 znakova."
+      },
+      "taxId": {
+        "required": "Unesite PIB.",
+        "invalid": "PIB mora imati 8 ili 13 cifara.",
+        "taken": "Kupac sa ovim PIB-om je već registrovan."
+      },
+      "addressLine": {
+        "required": "Unesite adresu.",
+        "invalid": "Adresa mora imati između 2 i 200 znakova."
+      },
+      "city": {
+        "required": "Unesite grad.",
+        "invalid": "Naziv grada mora imati između 2 i 100 znakova."
+      },
+      "postalCode": {
+        "required": "Unesite poštanski broj.",
+        "invalid": "Poštanski broj mora imati 5 cifara."
+      },
+      "contactEmail": {
+        "required": "Unesite kontakt e-mail firme.",
+        "invalid": "Unesite ispravnu e-mail adresu, na primjer nabavka@firma.me."
+      },
+      "contactPhone": {
+        "invalid": "Telefon može imati najviše 50 znakova."
+      }
+    }
+  },
   "placeholder": {
     "description": "Ovaj ekran još nije izrađen."
   }
