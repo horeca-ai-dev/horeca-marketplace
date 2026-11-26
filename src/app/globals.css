@@ -1,18 +1,190 @@
 @import "tailwindcss";
 
-/* Design tokens and the Inter font come with the design-system task (DESIGN.md). */
+/*
+ * Design tokens (D4-A0). Names follow shadcn/ui where it has one (background, foreground,
+ * muted-foreground, border, input, ring, primary, destructive), so D4-A1 adds components without
+ * a second vocabulary. DESIGN.md is the rule book; this file is the only place a colour, size,
+ * radius, shadow or duration is defined. Components use the Tailwind utilities generated from the
+ * @theme block below (bg-surface, text-muted-foreground, rounded-md, shadow-float …) — never a raw hex value.
+ *
+ * Contrast: every text / background pair that DESIGN.md allows is listed in
+ * src/lib/design/contrast.ts, and src/lib/design/contrast.test.ts reads the hex values from THIS file
+ * and fails when a pair drops below its minimum. Change a colour here → run `pnpm test`.
+ */
 :root {
+  /* Surfaces: plain white and cool light grey with a slight green tint. */
   --background: #ffffff;
-  --foreground: #171717;
+  --surface: #f4f7f5;
+  --well: #eaefec;
+  --selected: #eef5f1;
+
+  /* Lines: `border` separates (decorative), `input` outlines controls (≥ 3:1). */
+  --border: #d3dbd6;
+  --input: #7c8a82;
+
+  /* Text. */
+  --foreground: #16201b;
+  --muted-foreground: #55625b;
+
+  /* The one green: primary actions, active states, links. Solid fill = buttons only. */
+  --primary: #1f6b4a;
+  --primary-hover: #18573c;
+  --primary-foreground: #ffffff;
+  --ring: #1f6b4a;
+
+  /* Destructive button fill (white label). Error TEXT uses --negative-text. */
+  --destructive: #b3261e;
+  --destructive-hover: #951f18;
+
+  /* Badge tones — tint + text, always with a dot and a label. Never used for buttons. */
+  --positive-bg: #e2f1e9;
+  --positive-text: #17593d;
+  --attention-bg: #fbefd3;
+  --attention-text: #734c00;
+  --negative-bg: #fbe5e2;
+  --negative-text: #9e241c;
+  --neutral-bg: #eaefec;
+  --neutral-text: #3f4b45;
+  --progress-bg: #e3ecf1;
+  --progress-text: #2f4f63;
+
+  /* Motion: nothing is slower than 200 ms. */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+
+  /* Control and table-row heights (px values on the 4-px grid). */
+  --control-h: 2.5rem;
+  --row-h-comfortable: 3.5rem;
+  --row-h-compact: 2.5rem;
 }
 
+/* Tailwind v4 theme. `inline` = utilities reference the variables above, so one edit changes both. */
 @theme inline {
+  /* Only our palette: `bg-blue-500` and friends do not exist in this project. */
+  --color-*: initial;
+  --color-white: #ffffff;
+  --color-transparent: transparent;
+  --color-current: currentColor;
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-well: var(--well);
+  --color-selected: var(--selected);
+  --color-border: var(--border);
+  --color-input: var(--input);
   --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-ring: var(--ring);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-positive-bg: var(--positive-bg);
+  --color-positive-text: var(--positive-text);
+  --color-attention-bg: var(--attention-bg);
+  --color-attention-text: var(--attention-text);
+  --color-negative-bg: var(--negative-bg);
+  --color-negative-text: var(--negative-text);
+  --color-neutral-bg: var(--neutral-bg);
+  --color-neutral-text: var(--neutral-text);
+  --color-progress-bg: var(--progress-bg);
+  --color-progress-text: var(--progress-text);
+
+  /* One family. --font-app is set by next/font (root layout from D4-A1; /dev/style sets it per sample). */
+  --font-sans:
+    var(--font-app, system-ui), system-ui, "Segoe UI", Arial, sans-serif;
+
+  /* Type scale (size / line height): caption, small, body, H3, H2, H1. Nothing larger exists. */
+  --text-*: initial;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.625rem;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.875rem;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 2.25rem;
+
+  /* Three weights: regular, medium (labels, table headers), semibold (headings, buttons). */
+  --font-weight-*: initial;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* One radius, 6 px, whichever size name a component (or shadcn) asks for. */
+  --radius-*: initial;
+  --radius-xs: 0.375rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.375rem;
+
+  /* One shadow, for floating layers only (cart drawer, dialogs, menus, side panel on mobile). */
+  --shadow-*: initial;
+  --shadow-float: 0 8px 24px rgb(22 32 27 / 0.16);
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+  --blur-*: initial;
+
+  /* Breakpoints (DESIGN.md → Layout). */
+  --breakpoint-*: initial;
+  --breakpoint-sm: 22.5rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+
+  /* Motion: `transition-*` utilities default to the fast duration and one ease-out curve. */
+  --ease-*: initial;
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --default-transition-duration: var(--motion-fast);
+  --default-transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: system-ui, "Segoe UI", Arial, sans-serif;
+@layer base {
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    /* Written out (not var(--font-sans)) so a subtree that sets --font-app gets its own font. */
+    font-family:
+      var(--font-app, system-ui), system-ui, "Segoe UI", Arial, sans-serif;
+  }
+
+  /* Headings: upright, one weight, one colour. Hierarchy comes from size only. */
+  h1,
+  h2,
+  h3 {
+    font-style: normal;
+    font-weight: 600;
+    color: var(--foreground);
+  }
+
+  /* One focus ring for every focusable element, keyboard focus only. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Touch devices: controls grow to the 44-px target. */
+  @media (pointer: coarse) {
+    :root {
+      --control-h: 2.75rem;
+    }
+  }
+
+  /* Reduced motion: state changes still happen, they just do not animate. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
