@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getTranslations } from "next-intl/server";
+import { SkipLink } from "@/components/domain/shell/skip-link";
+import { StagingBanner } from "@/components/domain/shell/staging-banner";
 import { fontLatin, fontLatinExt } from "./fonts";
 import "./globals.css";
 
@@ -17,6 +19,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${fontLatin.variable} ${fontLatinExt.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
+        <SkipLink />
+        <StagingBanner />
         <NextIntlClientProvider>{children}</NextIntlClientProvider>
       </body>
     </html>
