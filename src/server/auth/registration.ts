@@ -64,6 +64,7 @@ export async function registerCompany(
     ) {
       throw new Conflict(
         "An account with this e-mail already exists. Please log in.",
+        { reason: "EMAIL_TAKEN" },
       );
     }
     throw error;

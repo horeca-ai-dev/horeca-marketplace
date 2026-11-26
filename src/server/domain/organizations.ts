@@ -40,7 +40,9 @@ export async function registerOrganization(
     .where(eq(member.userId, userId))
     .limit(1);
   if (existing)
-    throw new Conflict("This account already belongs to a company.");
+    throw new Conflict("This account already belongs to a company.", {
+      reason: "ALREADY_HAS_COMPANY",
+    });
 
   // 2.
   const organizationId = generateId();
@@ -86,6 +88,7 @@ export async function registerOrganization(
     if (isUniqueViolation(error, TAX_ID_UNIQUE)) {
       throw new Conflict(
         "A buyer with this tax ID (PIB) is already registered.",
+        { reason: "TAX_ID_TAKEN" },
       );
     }
     throw error;

@@ -52,6 +52,16 @@ function input(
 /** Reads as the worker login (no RLS involved yet): what really ended up in the tables. */
 const read = <T>(fn: Parameters<typeof withSystemTx<T>>[0]) => withSystemTx(fn);
 
+/** The Conflict a call fails with (fails the test if it succeeds or throws something else). */
+async function conflictOf(promise: Promise<unknown>): Promise<Conflict> {
+  const error = await promise.then(
+    () => undefined,
+    (e: unknown) => e,
+  );
+  expect(error).toBeInstanceOf(Conflict);
+  return error as Conflict;
+}
+
 /** A request to Better Auth's HTTP API, as the browser (or the G0 curl script) would send it. */
 function http(path: string, body: unknown, cookie?: string) {
   return getAuth().handler(
@@ -126,7 +136,9 @@ describe("registerCompany", () => {
     const first = input();
     await registerCompany(first);
     const second = input({ taxId: first.company.taxId });
-    await expect(registerCompany(second)).rejects.toThrow(Conflict);
+    expect(await conflictOf(registerCompany(second))).toMatchObject({
+      reason: "TAX_ID_TAKEN",
+    });
 
     // The rolled-back transaction left no profile, organization or membership for that tax ID's second user.
     const profiles = await read((tx) =>
@@ -164,9 +176,10 @@ describe("registerCompany", () => {
     vi.stubEnv("REGISTRATION_OPEN", "true");
     const first = input();
     await registerCompany(first);
-    await expect(
+    const error = await conflictOf(
       registerCompany({ ...input(), account: first.account }),
-    ).rejects.toThrow(Conflict);
+    );
+    expect(error.reason).toBe("EMAIL_TAKEN");
   });
 
   it("a user who already has a company cannot create a second one", async () => {
@@ -177,13 +190,14 @@ describe("registerCompany", () => {
       email: first.account.email,
       password: PASSWORD,
     });
-    await expect(
+    const error = await conflictOf(
       completeCompanySetup(
         reg.userId,
         new Headers({ cookie: cookieOf(login) }),
         input().company,
       ),
-    ).rejects.toThrow(Conflict);
+    );
+    expect(error.reason).toBe("ALREADY_HAS_COMPANY");
   });
 
   it("REGISTRATION_OPEN=false → Forbidden, nothing is created", async () => {

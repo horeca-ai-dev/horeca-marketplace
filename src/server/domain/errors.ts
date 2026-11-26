@@ -49,12 +49,21 @@ export class Forbidden extends DomainError {
   }
 }
 
+/**
+ * A stable, machine-readable cause of a 409, for the client to branch on (a field to mark, a redirect)
+ * without matching the English message. Add a value only when a client has to react differently to it.
+ */
+export type ConflictReason =
+  "TAX_ID_TAKEN" | "EMAIL_TAKEN" | "ALREADY_HAS_COMPANY";
+
 export class Conflict extends DomainError {
   readonly code = "CONFLICT";
   readonly status = 409;
-  constructor(message: string) {
+  readonly reason?: ConflictReason;
+  constructor(message: string, options?: { reason?: ConflictReason }) {
     super(message);
     this.name = "Conflict";
+    this.reason = options?.reason;
   }
 }
 
