@@ -1,0 +1,56 @@
+{
+  "_note": "Examples E11 and E12 of docs/specification/money-rules.md, computed from E5 of docs/decisions-9-11/money-vectors.json (supplier C ordered directly). Amounts in cents.",
+  "E11_mixed_modes": {
+    "sub_orders": {
+      "A": {
+        "mode": "platform",
+        "gross_cents": 192390,
+        "commission_cents": 12720,
+        "entries": [
+          ["sale", 192390],
+          ["commission", -12720]
+        ],
+        "balance_cents": 179670
+      },
+      "B": {
+        "mode": "platform",
+        "gross_cents": 36300,
+        "commission_cents": 2400,
+        "entries": [
+          ["sale", 36300],
+          ["commission", -2400]
+        ],
+        "balance_cents": 33900
+      },
+      "C": {
+        "mode": "direct",
+        "gross_cents": 11616,
+        "commission_cents": 624,
+        "entries": [["commission", -624]],
+        "balance_cents": -624
+      }
+    },
+    "order_gross_cents": 240306,
+    "amount_due_cents": 228690,
+    "c_balance_after_commission_payment_cents": 0
+  },
+  "E12_cancellations": {
+    "b_cancels_while_paid": {
+      "reversal_entries": [
+        ["sale_reversal", -36300],
+        ["commission_reversal", 2400]
+      ],
+      "b_balance_cents": 0,
+      "paid_cents": 228690,
+      "amount_due_after_cents": 192390,
+      "status_before_refund": "refund_due",
+      "paid_after_refund_cents": 192390,
+      "status_after_refund": "paid"
+    },
+    "c_cancels_direct": {
+      "reversal_entries": [["commission_reversal", 624]],
+      "c_balance_cents": 0,
+      "amount_due_unchanged_cents": 228690
+    }
+  }
+}

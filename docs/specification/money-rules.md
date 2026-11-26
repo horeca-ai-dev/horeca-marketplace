@@ -120,7 +120,7 @@ the checkout transaction.
 **E1–E10** in `docs/decisions-9-11/money-rules.md` stay valid as unit-test vectors for the arithmetic (E1–E6,
 E10 and the platform-mode parts of E5, E8, E9). **Superseded by 012:** E7's "pro-forma v2" (no re-issue) and the
 "payment recorded by the platform" steps of E8 (the worker records them). Two new examples, computed from E5's
-numbers, to be added to `money-vectors.json` in D4-B1:
+numbers, added in D4-B1 as `src/server/domain/money-vectors-012.json` (the original `money-vectors.json` stays untouched) and tested in `money.test.ts`:
 
 ### E11 — mixed modes in one checkout (E5, with supplier C ordered **directly**)
 | Sub-order | Mode | Net | VAT | Gross | Commission | Ledger entries | Balance |

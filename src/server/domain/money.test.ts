@@ -6,12 +6,19 @@ import { readFileSync } from "node:fs";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  amountDueCents,
+  cancellationLedgerEntries,
+  checkoutLedgerEntries,
   commissionCents,
+  ledgerBalance,
   lineAmounts,
+  paymentStatus,
   payableCents,
   roundDiv,
   sumAmounts,
+  type LedgerLine,
   type LineAmounts,
+  type PurchaseMode,
 } from "./money";
 
 type VLine = {
@@ -196,5 +203,295 @@ describe("money properties", () => {
       lineAmounts({ unitPriceCents: -1, quantity: 1, vatRateBps: 2100 }),
     ).toThrow(RangeError);
     expect(() => commissionCents(100, 650.5)).toThrow(RangeError);
+  });
+});
+
+// ── decision 012: purchase modes, ledger entries, payment status ──────────────────────────────────────────
+type V012SubOrder = {
+  mode: PurchaseMode;
+  gross_cents: number;
+  commission_cents: number;
+  entries: [string, number][];
+  balance_cents: number;
+};
+const v012 = JSON.parse(
+  readFileSync(new URL("./money-vectors-012.json", import.meta.url), "utf8"),
+) as {
+  E11_mixed_modes: {
+    sub_orders: Record<string, V012SubOrder>;
+    order_gross_cents: number;
+    amount_due_cents: number;
+    c_balance_after_commission_payment_cents: number;
+  };
+  E12_cancellations: {
+    b_cancels_while_paid: {
+      reversal_entries: [string, number][];
+      b_balance_cents: number;
+      paid_cents: number;
+      amount_due_after_cents: number;
+      status_before_refund: string;
+      paid_after_refund_cents: number;
+      status_after_refund: string;
+    };
+    c_cancels_direct: {
+      reversal_entries: [string, number][];
+      c_balance_cents: number;
+      amount_due_unchanged_cents: number;
+    };
+  };
+};
+
+const moneyOf = (v: V012SubOrder) => ({
+  mode: v.mode,
+  grossCents: v.gross_cents,
+  commissionCents: v.commission_cents,
+});
+const asPairs = (lines: LedgerLine[]) =>
+  lines.map((l) => [l.type, l.amountCents]);
+
+describe("E11 mixed modes (money-vectors-012.json)", () => {
+  const e11 = v012.E11_mixed_modes;
+
+  it.each(Object.entries(e11.sub_orders))(
+    "sub-order %s: checkout entries and balance",
+    (_name, v) => {
+      const entries = checkoutLedgerEntries(moneyOf(v));
+      expect(asPairs(entries)).toEqual(v.entries);
+      expect(ledgerBalance(entries)).toBe(v.balance_cents);
+    },
+  );
+
+  it("the sub-order amounts of E11 are the E5 amounts (C ordered directly)", () => {
+    // Ties E11 back to the arithmetic of E5, so the two vector files cannot drift apart.
+    const e5 = vectors.E5_three_supplier_checkout.sub_orders;
+    for (const key of ["A", "B", "C"]) {
+      const s = subOrder(e5[key]!);
+      const v = e11.sub_orders[key]!;
+      expect(s.grossCents).toBe(v.gross_cents);
+      expect(s.commission).toBe(v.commission_cents);
+    }
+  });
+
+  it("order gross is 240306 but the amount due is the platform part only: 228690", () => {
+    const subs = Object.values(e11.sub_orders).map((v) => ({
+      mode: v.mode,
+      cancelled: false,
+      grossCents: v.gross_cents,
+    }));
+    expect(subs.reduce((sum, s) => sum + s.grossCents, 0)).toBe(
+      e11.order_gross_cents,
+    );
+    expect(amountDueCents(subs)).toBe(e11.amount_due_cents);
+  });
+
+  it("C's commission payment brings its balance to 0", () => {
+    const c = e11.sub_orders.C!;
+    const entries = [
+      ...checkoutLedgerEntries(moneyOf(c)),
+      { amountCents: -c.balance_cents }, // commission_payment: + what C paid
+    ];
+    expect(ledgerBalance(entries)).toBe(
+      e11.c_balance_after_commission_payment_cents,
+    );
+  });
+});
+
+describe("E12 cancellations (money-vectors-012.json)", () => {
+  const e12 = v012.E12_cancellations;
+  const e11 = v012.E11_mixed_modes;
+
+  it("B cancels while paid: reversals bring B to 0 and the buyer is owed a refund", () => {
+    const b = e12.b_cancels_while_paid;
+    const sb = moneyOf(e11.sub_orders.B!);
+    const reversal = cancellationLedgerEntries(sb);
+    expect(asPairs(reversal)).toEqual(b.reversal_entries);
+    expect(ledgerBalance([...checkoutLedgerEntries(sb), ...reversal])).toBe(
+      b.b_balance_cents,
+    );
+
+    const after = amountDueCents([
+      { mode: "platform", cancelled: false, grossCents: 192390 },
+      { mode: "platform", cancelled: true, grossCents: 36300 },
+      { mode: "direct", cancelled: false, grossCents: 11616 },
+    ]);
+    expect(after).toBe(b.amount_due_after_cents);
+    expect(paymentStatus(after, b.paid_cents)).toBe(b.status_before_refund);
+    expect(paymentStatus(after, b.paid_after_refund_cents)).toBe(
+      b.status_after_refund,
+    );
+  });
+
+  it("C cancels (direct): only the commission is reversed; the amount due does not move", () => {
+    const c = e12.c_cancels_direct;
+    const sc = moneyOf(e11.sub_orders.C!);
+    const reversal = cancellationLedgerEntries(sc);
+    expect(asPairs(reversal)).toEqual(c.reversal_entries);
+    expect(ledgerBalance([...checkoutLedgerEntries(sc), ...reversal])).toBe(
+      c.c_balance_cents,
+    );
+    expect(
+      amountDueCents([
+        { mode: "platform", cancelled: false, grossCents: 192390 },
+        { mode: "platform", cancelled: false, grossCents: 36300 },
+        { mode: "direct", cancelled: true, grossCents: 11616 },
+      ]),
+    ).toBe(c.amount_due_unchanged_cents);
+  });
+});
+
+describe("paymentStatus", () => {
+  it.each([
+    [228690, 0, "unpaid"],
+    [228690, 100, "unpaid"],
+    [228690, 228690, "paid"],
+    [192390, 228690, "refund_due"],
+    [0, 0, "not_applicable"],
+    [0, 36300, "refund_due"], // every platform part cancelled after payment: the buyer is still owed money
+  ] as const)("due %i, paid %i → %s", (due, paid, expected) => {
+    expect(paymentStatus(due, paid)).toBe(expected);
+  });
+
+  it("rejects negative or fractional amounts", () => {
+    expect(() => paymentStatus(-1, 0)).toThrow(RangeError);
+    expect(() => paymentStatus(100, 0.5)).toThrow(RangeError);
+  });
+});
+
+describe("ledger functions reject bad input", () => {
+  it("commission above gross", () => {
+    expect(() =>
+      checkoutLedgerEntries({
+        mode: "platform",
+        grossCents: 100,
+        commissionCents: 101,
+      }),
+    ).toThrow(RangeError);
+  });
+  it("a fractional ledger amount", () => {
+    expect(() => ledgerBalance([{ amountCents: 1.5 }])).toThrow(RangeError);
+  });
+});
+
+describe("ledger properties", () => {
+  const modeArb = fc.constantFrom<PurchaseMode>("direct", "platform");
+  const subOrderArb = fc
+    .record({
+      lines: fc.array(lineArb, { minLength: 1, maxLength: 10 }),
+      bps: commissionBps,
+      mode: modeArb,
+    })
+    .map(({ lines, bps, mode }) => {
+      const totals = sumAmounts(lines.map(lineAmounts));
+      return {
+        mode,
+        grossCents: totals.grossCents,
+        commissionCents: commissionCents(totals.netCents, bps),
+      };
+    })
+    .filter((s) => s.grossCents > 0);
+
+  it("platform: the entries leave the supplier gross − commission (= payable)", () => {
+    fc.assert(
+      fc.property(subOrderArb, (s) => {
+        fc.pre(s.mode === "platform");
+        return (
+          ledgerBalance(checkoutLedgerEntries(s)) ===
+          payableCents(s.grossCents, s.commissionCents)
+        );
+      }),
+    );
+  });
+
+  it("direct: the entries sum to −commission (a negative balance is allowed)", () => {
+    fc.assert(
+      fc.property(subOrderArb, (s) => {
+        fc.pre(s.mode === "direct");
+        return ledgerBalance(checkoutLedgerEntries(s)) === -s.commissionCents;
+      }),
+    );
+  });
+
+  it("a cancelled sub-order's entries sum to 0, in both modes", () => {
+    fc.assert(
+      fc.property(
+        subOrderArb,
+        (s) =>
+          ledgerBalance([
+            ...checkoutLedgerEntries(s),
+            ...cancellationLedgerEntries(s),
+          ]) === 0,
+      ),
+    );
+  });
+
+  it("every entry obeys the database sign rule, and direct never books a sale", () => {
+    fc.assert(
+      fc.property(subOrderArb, (s) => {
+        const all = [
+          ...checkoutLedgerEntries(s),
+          ...cancellationLedgerEntries(s),
+        ];
+        const signsOk = all.every(
+          (e) =>
+            (e.type === "sale" && e.amountCents > 0) ||
+            (e.type === "sale_reversal" && e.amountCents < 0) ||
+            (e.type === "commission" && e.amountCents <= 0) ||
+            (e.type === "commission_reversal" && e.amountCents >= 0),
+        );
+        const noDirectSale =
+          s.mode === "platform" ||
+          all.every((e) => e.type !== "sale" && e.type !== "sale_reversal");
+        return signsOk && noDirectSale;
+      }),
+    );
+  });
+
+  it("ledger balance does not depend on the order of the entries", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.integer({ min: -1_000_000, max: 1_000_000 }), {
+          maxLength: 30,
+        }),
+        (amounts) => {
+          const entries = amounts.map((amountCents) => ({ amountCents }));
+          return (
+            ledgerBalance(entries) === ledgerBalance([...entries].reverse())
+          );
+        },
+      ),
+    );
+  });
+
+  it("amount due counts only non-cancelled platform sub-orders; the status follows the rule", () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            mode: modeArb,
+            cancelled: fc.boolean(),
+            grossCents: fc.integer({ min: 0, max: 5_000_000 }),
+          }),
+          { maxLength: 6 },
+        ),
+        fc.integer({ min: 0, max: 20_000_000 }),
+        (subs, paid) => {
+          const expected = subs
+            .filter((s) => s.mode === "platform" && !s.cancelled)
+            .reduce((sum, s) => sum + s.grossCents, 0);
+          const due = amountDueCents(subs);
+          const expectedStatus =
+            paid > due
+              ? "refund_due"
+              : due === 0
+                ? "not_applicable"
+                : paid === due
+                  ? "paid"
+                  : "unpaid";
+          return (
+            due === expected && paymentStatus(due, paid) === expectedStatus
+          );
+        },
+      ),
+    );
   });
 });
