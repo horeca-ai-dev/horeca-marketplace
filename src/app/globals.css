@@ -1,4 +1,6 @@
 @import "tailwindcss" source("..");
+/* Enter / exit animations of floating layers (sheet, menu): animate-in, fade-in-0, slide-in-from-left … */
+@import "tw-animate-css";
 
 /*
  * Design tokens (D4-A0). Names follow shadcn/ui where it has one (background, foreground,
