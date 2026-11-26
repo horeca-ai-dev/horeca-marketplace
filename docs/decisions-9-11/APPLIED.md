@@ -107,6 +107,12 @@ Source: [`docs/decisions/012-purchase-modes-payments-stock.md`](../decisions/012
   - Invariants (tests): platform `payable + commission = gross`; direct sub-order entries sum to **−commission**; cancelled sub-orders sum to 0; a supplier balance **may be negative** (no check constraint against it).
 - **Pro-forma** (`proforma_invoices`): created once at checkout **only if the order has a platform part**; its totals = the **platform sub-orders**, not the order totals; never changed afterwards. "Paid" is shown on the order page, not in the PDF.
 - Commission formula unchanged; charged per sub-order in **both** modes.
+- **Decided in D4-B1 (26.11):**
+  - **`orders.payment_status` rule** (replaces the special case "no platform sub-order" in `recompute_order`; written into the function in D4-B2 and into `money.ts`): `amount_due` = Σ gross of non-cancelled `platform` sub-orders; `amount_paid` = Σ receipts − Σ refunds; **`refund_due`** if `amount_paid > amount_due` · **`not_applicable`** if `amount_due = 0` · **`paid`** if `amount_paid = amount_due` · otherwise **`unpaid`**. It differs from the older wording only when the order *has* platform sub-orders but all are cancelled: "nothing to pay" is shown, not "unpaid".
+  - **Split of the work:** D4-B1 (migration 0004) = tables, enums, the `order_number_seq` sequence, constraints, grants and the `settings` seed; the policies, `app.recompute_order()`, `app.next_invoice_number()` (+ `invoice_number_seq`) and `app.resolve_commission_bps()` are **D4-B2** (they live in `rls.sql`).
+  - **`horeca_app` keeps INSERT on `order_payments`** (as in `rls.sql` §3), because the unchanged `rls_tests.sql` records a payment as the platform; no screen uses it. The worker's INSERT on `order_payments` and its policy come with D5-B0 together with `payments`.
+  - **`sub_orders.order_payment_status` and `orders.payment_status` default to `unpaid`**; the checkout (D9-B1) calls `app.recompute_order()` after inserting, which sets `not_applicable` for a direct-only order.
+  - **Settings seed** (`src/server/db/seed/settings.ts`, adds only what is missing): `default_commission_bps` 800, `vat_rates_bps` `[2100,1500,700,0]`, `invoice_due_days` 8, `platform_company` (fictional).
 
 ### D4-B2 · `rls.sql` migration — identity policy / guard edits (in addition to the §2 edits)
 - `org_profiles_insert` (line 131): `WITH CHECK (organization_id = app.org_id() OR app.is_platform())`.
