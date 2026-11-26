@@ -1,7 +1,7 @@
 # CI (D3-B0) — runs on every pull request into main and on every push to main.
 #
 #   checks    lint · format · typecheck · commit messages · secrets (gitleaks) · audit · unit tests · build
-#   database  migration check · migrate entry on an empty database (twice) · integration tests
+#   database  migration check · migrate entry on an empty database (twice) · integration tests · RLS tests (psql)
 #
 # Both jobs must be green before a PR is merged (set them as required checks in the main ruleset).
 # Every action is pinned to a full commit SHA (the tag is in the comment) and was at least two weeks
@@ -122,6 +122,10 @@ jobs:
 
       - name: Integration tests
         run: pnpm test:integration
+
+      # RLS policies: the real migrations on a throwaway database, then rls_tests.sql with psql (D4-B2).
+      - name: RLS tests (psql)
+        run: pnpm test:rls
 
       - name: Service logs (on failure)
         if: failure()

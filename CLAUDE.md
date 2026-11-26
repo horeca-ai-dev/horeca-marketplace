@@ -37,6 +37,7 @@ docker build -t horeca:local .   # the one image: web (default), worker, migrate
 pnpm lint && pnpm typecheck && pnpm test     # before every push
 pnpm format              # Prettier (format:check in CI)
 pnpm test:integration    # Testcontainers: needs Docker running; starts its own Postgres (your dev database is not touched); Mailpit from Compose
+pnpm test:rls            # RLS policies: real migrations on a throwaway database + docs/decisions-9-11/tests/rls_tests.sql via psql (needs the Compose postgres and .env)
 pnpm test:e2e            # Playwright
 pnpm search:reindex      # rebuild Meilisearch from Postgres
 SMOKE_BASE_URL=… SMOKE_BASIC_AUTH_USER=… SMOKE_BASIC_AUTH_PASS=… scripts/smoke-g0.sh   # G0 smoke test (CI runs it after each staging deploy)
