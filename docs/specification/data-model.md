@@ -118,4 +118,6 @@ messages are Montenegrin (decision 012 §10) and come from message catalogues, n
 
 Rules: a new table ships **with its grants**; every new table gets RLS policies, a permission-matrix entry and
 RLS tests in the same PR; a merged migration is never edited; an ERD change after the freeze needs an ADR.
+RLS is `ENABLE`d, not `FORCE`d, so the owner login bypasses it — why, and how that is contained:
+[ADR 014](../decisions/014-rls-owner-escape-hatch.md).
 *(Migration numbers 0003–0006 are the plan — they follow whatever is merged first.)*
