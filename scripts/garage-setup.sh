@@ -14,6 +14,7 @@
 # Options (env): GARAGE_BUCKET (horeca-media), GARAGE_KEY_NAME (horeca-app), GARAGE_ZONE (dc1),
 #                GARAGE_CAPACITY (1G — the node's share of the layout; Garage uses it to place data)
 set -euo pipefail
+export MSYS_NO_PATHCONV=1  # Git Bash on Windows: keep /garage as a container path
 
 export COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.dev.yml}"
 bucket="${GARAGE_BUCKET:-horeca-media}"
