@@ -5,3 +5,9 @@ allowBuilds:
   cpu-features: false
   protobufjs: false
   ssh2: false
+  # Pulled in by next-intl, which uses them only for message extraction (useExtracted / getExtracted
+  # and the `experimental.extract` plugin option) — we write messages/*.json by hand. Their install
+  # scripts stay off: both ship prebuilt binaries as optional packages (@swc/core-<platform>,
+  # @parcel/watcher-<platform>); the scripts only check for / compile a fallback.
+  "@parcel/watcher": false
+  "@swc/core": false
