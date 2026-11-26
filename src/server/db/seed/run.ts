@@ -11,6 +11,7 @@ import { env } from "@/env.core";
 import * as schema from "../schema";
 import { seedCatalogue, type CatalogueSeedResult } from "./catalogue";
 import { seedDemo, type DemoSeedResult } from "./demo";
+import { seedSettings, type SettingsSeedResult } from "./settings";
 import { resolveSeedPassword } from "./password";
 
 export type SeedOptions = {
@@ -19,7 +20,9 @@ export type SeedOptions = {
   password: string | undefined;
 };
 
-export type SeedResult = CatalogueSeedResult & DemoSeedResult;
+export type SeedResult = CatalogueSeedResult &
+  SettingsSeedResult &
+  DemoSeedResult;
 
 export async function runSeed(options: SeedOptions): Promise<SeedResult> {
   const password = resolveSeedPassword(options.appEnv, options.password);
@@ -33,8 +36,9 @@ export async function runSeed(options: SeedOptions): Promise<SeedResult> {
   try {
     const db = drizzle(pool, { schema });
     const catalogue = await db.transaction((tx) => seedCatalogue(tx));
+    const settings = await db.transaction((tx) => seedSettings(tx));
     const demo = await seedDemo(db, password);
-    return { ...catalogue, ...demo };
+    return { ...catalogue, ...settings, ...demo };
   } finally {
     await pool.end();
   }

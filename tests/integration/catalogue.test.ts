@@ -15,6 +15,7 @@ import { closeDb } from "@/server/db/client";
 import * as schema from "@/server/db/schema";
 import { flattenCategories } from "@/server/db/seed/catalogue-data";
 import { seedCatalogue } from "@/server/db/seed/catalogue";
+import { pgError, rejected } from "./helpers";
 import { withSystemTx, withTx, type RlsContext } from "@/server/db/tx";
 
 const ownerPool = new Pool({ connectionString: env.DATABASE_MIGRATE_URL });
@@ -34,22 +35,6 @@ const actor: RlsContext = {
 let leafId: string; // refrigeration.under_counter
 let productId: string;
 let imageId: string;
-
-/** The Postgres error behind a Drizzle error (wrapped in `cause`). */
-function pgCode(e: unknown): { code?: string; constraint?: string } {
-  const err = e as { cause?: object } & object;
-  return (err.cause ?? err) as { code?: string; constraint?: string };
-}
-
-/** Runs `fn` in its own transaction, which must fail with a violation of exactly this constraint. */
-async function rejected(constraint: string, fn: () => Promise<unknown>) {
-  const error = await fn().then(
-    () => null,
-    (e: unknown) => e,
-  );
-  expect(error, `expected ${constraint} to reject`).not.toBeNull();
-  expect(pgCode(error).constraint).toBe(constraint);
-}
 
 const baseProduct = (over: Record<string, unknown> = {}) => ({
   supplierOrgId: supplierA,
@@ -264,7 +249,7 @@ describe("grants", () => {
       () => null,
       (e: unknown) => e,
     );
-    expect(pgCode(err).code).toBe("42501"); // insufficient_privilege
+    expect(pgError(err).code).toBe("42501"); // insufficient_privilege
   });
 
   it("lets the web login delete a product image", async () => {
@@ -301,7 +286,7 @@ describe("grants", () => {
         () => null,
         (e: unknown) => e,
       );
-      expect(pgCode(err).code, column).toBe("42501");
+      expect(pgError(err).code, column).toBe("42501");
     }
   });
 
@@ -316,7 +301,7 @@ describe("grants", () => {
         () => null,
         (e: unknown) => e,
       );
-      expect(pgCode(err).code).toBe("42501");
+      expect(pgError(err).code).toBe("42501");
     }
   });
 });

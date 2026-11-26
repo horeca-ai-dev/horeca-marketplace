@@ -1,5 +1,5 @@
 /** Column helpers shared by our own schema files. */
-import { bigint, customType } from "drizzle-orm/pg-core";
+import { bigint, customType, timestamp } from "drizzle-orm/pg-core";
 
 /**
  * Money: integer cents (EUR) in a Postgres `bigint` (CLAUDE.md rule 7). `mode: "number"` maps it to a
@@ -12,3 +12,11 @@ export const cents = (name: string) => bigint(name, { mode: "number" });
 export const ltree = customType<{ data: string }>({
   dataType: () => "ltree",
 });
+
+/** `created_at timestamptz not null default now()` — the same column in many tables. */
+export const createdAt = () =>
+  timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
+
+/** `updated_at timestamptz not null default now()` (the service sets it on every update). */
+export const updatedAt = () =>
+  timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();

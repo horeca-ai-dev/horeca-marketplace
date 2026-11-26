@@ -67,6 +67,18 @@ describe("first run on an empty database", () => {
     expect(first.organizationsCreated).toBe(8);
   });
 
+  it("seeds the platform settings (they may already exist from an earlier test file)", async () => {
+    const rows = await owner
+      .select({ key: schema.settings.key })
+      .from(schema.settings);
+    expect(rows.map((r) => r.key).sort()).toEqual([
+      "default_commission_bps",
+      "invoice_due_days",
+      "platform_company",
+      "vat_rates_bps",
+    ]);
+  });
+
   it("leaves no live session behind (sign-up opens one, the seed removes it)", async () => {
     const rows = await owner
       .select({ n: count() })
@@ -184,6 +196,7 @@ describe("running the seed again", () => {
     expect(second).toMatchObject({
       categoriesInserted: 0,
       attributesInserted: 0,
+      settingsInserted: 0,
       usersCreated: 0,
       organizationsCreated: 0,
     });

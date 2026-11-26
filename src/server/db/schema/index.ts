@@ -5,3 +5,5 @@
 export * from "./auth";
 export * from "./identity";
 export * from "./catalogue";
+export * from "./orders";
+export * from "./finance";
