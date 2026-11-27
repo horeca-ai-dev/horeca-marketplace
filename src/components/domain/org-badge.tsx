@@ -34,7 +34,7 @@ export function OrgBadge({
     <span
       data-slot="org-badge"
       className={cn(
-        "inline-flex min-w-0 items-center gap-2 text-sm font-medium text-foreground",
+        "inline-flex max-w-full min-w-0 items-center gap-2 text-sm font-medium text-foreground",
         className,
       )}
     >
