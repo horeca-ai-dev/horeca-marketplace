@@ -11,11 +11,15 @@
 #                          only on an EMPTY volume, so this is also how changed database passwords take
 #                          effect. Afterwards run scripts/garage-setup.sh again, put the new S3 key pair
 #                          into .env and deploy again (README → One-time server setup → Garage).
-#   production <sha>       refused until D5-A1
+#   production <sha>       pull → Postgres up → PRE-DEPLOY pg_dump (newest 5 kept) → migrate → up
+#                          web + worker → wait for /api/health → prune. Never a reset. A failed dump stops
+#                          the deploy before anything changes. Rollback = the same with the previous SHA
+#                          (README → Deployment & releases → Rollback).
 #
 # <sha> = the full 40-character commit SHA = the image tag CI pushed to GHCR.
 # Files: /opt/horeca/deploy/{compose.yml,postgres/init/,garage/garage.toml} (copied from the repo's deploy/ by hand),
-#        /opt/horeca/<env>/.env (secrets), /opt/horeca/<env>/deploy.log, /opt/horeca/<env>/deployed-sha.
+#        /opt/horeca/<env>/.env (secrets), /opt/horeca/<env>/deploy.log, /opt/horeca/<env>/deployed-sha,
+#        /var/backups/horeca/production/pre-deploy/db-<UTC>-was-<previous sha, 12>.dump (production only).
 set -euo pipefail
 # Run from / : started with `sudo -u deploy` from another user's home, the inherited working directory
 # is unreadable to deploy and find (and others) fail to restore it. Every path below is absolute.
@@ -26,6 +30,7 @@ readonly DEPLOY_DIR="$ROOT/deploy"
 readonly IMAGE_REPO=ghcr.io/horeca-ai-dev/horeca-marketplace
 readonly HEALTH_TIMEOUT_S=90
 readonly KEEP_IMAGES=5
+readonly KEEP_PREDEPLOY_DUMPS=5
 
 log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 refuse() {
@@ -39,16 +44,16 @@ request="${SSH_ORIGINAL_COMMAND-$*}"
 # One strict pattern for the whole line: a word, ONE space, 40 lowercase hex. Nothing else
 # (no extra words, newlines, quotes or shell characters) ever reaches the rest of the script.
 if [[ ! $request =~ ^([a-z-]+)\ ([0-9a-f]{40})$ ]]; then
-  refuse "usage: staging <40-hex commit sha> | staging-reset <40-hex commit sha>"
+  refuse "usage: staging|staging-reset|production <40-hex commit sha>"
 fi
 action="${BASH_REMATCH[1]}"
 sha="${BASH_REMATCH[2]}"
 
+# reset=true exists ONLY for the literal action staging-reset: production can never be reset from here.
 case "$action" in
-  staging) env=staging reset=false ;;
-  staging-reset) env=staging reset=true ;;
-  # TODO(D5-A1): production → pre-deploy pg_dump (keep 5) → same steps; never a reset.
-  production) refuse "production is not enabled yet (D5-A1)" ;;
+  staging) env=staging reset=false predeploy_dump=false ;;
+  staging-reset) env=staging reset=true predeploy_dump=false ;;
+  production) env=production reset=false predeploy_dump=true ;;
   *) refuse "unknown environment" ;;
 esac
 
@@ -77,7 +82,7 @@ compose() {
     "$@"
 }
 
-log "START: $env $sha (reset=$reset)"
+log "START: $env $sha (reset=$reset, pre-deploy dump=$predeploy_dump)"
 
 # ── 3. Pull first: a missing image fails here, before anything is stopped ───────────────────────
 compose --profile migrate pull --quiet
@@ -91,6 +96,37 @@ fi
 # Only Postgres gates the deploy; Meilisearch, Mailpit and Garage are "degraded" in /api/health, never
 # blocking. Garage is NOT waited for: it stays unhealthy until scripts/garage-setup.sh has run once.
 compose up --detach --wait postgres
+
+# ── 4b. Production: dump the database BEFORE migrations touch it ───────────────────────────────
+# The whole `horeca` database (incl. the pg-boss schema) as the image's superuser, custom format
+# (restore: deploy/restore-test.sh shows how). The file name records the SHA that was running, so a
+# rollback knows which image matches the dump. Written to *.partial first and renamed only on
+# success; any failure exits here (set -e), before the migration. On the very first deploy the
+# volume was empty a moment ago, so this dumps an empty database — harmless.
+if [[ $predeploy_dump == true ]]; then
+  dump_dir="/var/backups/horeca/$env/pre-deploy"
+  previous_sha="none"
+  if [[ -r $env_dir/deployed-sha ]]; then
+    previous_sha="$(head -c 40 "$env_dir/deployed-sha")"
+    [[ $previous_sha =~ ^[0-9a-f]{40}$ ]] || previous_sha="unknown"
+  fi
+  dump_file="$dump_dir/db-$(date -u +%Y%m%dT%H%M%SZ)-was-${previous_sha:0:12}.dump"
+  log "pre-deploy pg_dump → $dump_file"
+  (
+    umask 077 # dumps contain password hashes and personal data
+    mkdir -p "$dump_dir"
+    compose exec -T postgres pg_dump --username postgres --format custom --dbname horeca \
+      >"$dump_file.partial"
+    mv "$dump_file.partial" "$dump_file"
+  )
+  log "pre-deploy dump: $(du -h "$dump_file" | cut -f1)"
+  # Keep the newest $KEEP_PREDEPLOY_DUMPS; leftovers of failed dumps go too.
+  find "$dump_dir" -maxdepth 1 -type f -name 'db-*.dump' -printf '%T@ %p\n' |
+    sort -rn | tail -n +$((KEEP_PREDEPLOY_DUMPS + 1)) | cut -d' ' -f2- |
+    xargs -r rm -f --
+  find "$dump_dir" -maxdepth 1 -type f -name '*.partial' -delete
+fi
+
 compose up --detach meilisearch mailpit garage
 
 # ── 5. Migrations (one-off; exits non-zero on failure → the deploy stops, old app keeps running) ─
@@ -106,7 +142,7 @@ fi
 compose up --detach --remove-orphans web worker
 
 # ── 7. Health gate: 200 = Postgres + migration version OK ("degraded" still passes) ─────────────
-health_url="http://127.0.0.1:$web_port/api/health" # staging: WEB_PORT=3101
+health_url="http://127.0.0.1:$web_port/api/health" # WEB_PORT: staging 3101, production 3102
 log "waiting for $health_url (max ${HEALTH_TIMEOUT_S}s)"
 deadline=$((SECONDS + HEALTH_TIMEOUT_S))
 until body="$(curl --fail --silent --show-error --max-time 5 "$health_url" 2>/dev/null)"; do
