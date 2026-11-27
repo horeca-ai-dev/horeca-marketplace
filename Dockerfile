@@ -14,7 +14,6 @@
 #   /app/node_modules  full PRODUCTION dependencies for the bundled worker/migrate entries
 #   /app/dist          worker.mjs, migrate.mjs (esbuild, scripts/build-entries.mjs)
 #   /app/migrations    SQL migrations (MIGRATIONS_DIR)
-#   /data/media        media volume mount point (MEDIA_DIR), owned by the non-root user
 #   /ms-playwright     Chromium headless shell for the worker (PLAYWRIGHT_BROWSERS_PATH)
 
 # Node 26.13.1 (security release, 10.11.2026) on Debian trixie slim — same Debian as our Postgres image.
@@ -63,7 +62,6 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     PORT=3000 \
     MIGRATIONS_DIR=/app/migrations \
-    MEDIA_DIR=/data/media \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     PLAYWRIGHT_VERSION=${PLAYWRIGHT_VERSION}
 WORKDIR /app
@@ -94,10 +92,10 @@ COPY --from=build /app/public ./web/public
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/src/server/db/migrations ./migrations
 
-# Application files stay root-owned (read-only for the app). Only the media volume and Next's cache
-# folder are writable. A new named volume mounted at /data/media inherits this ownership.
-RUN mkdir -p /data/media web/.next/cache \
- && chown node:node /data/media web/.next/cache
+# Application files stay root-owned (read-only for the app). Only Next's cache folder is writable.
+# Media is not on the file system at all: it lives in Garage, reached over the S3 API (decision 013).
+RUN mkdir -p web/.next/cache \
+ && chown node:node web/.next/cache
 
 # The official image's unprivileged user (uid/gid 1000).
 USER node

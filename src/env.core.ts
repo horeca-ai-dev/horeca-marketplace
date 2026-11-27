@@ -29,6 +29,7 @@ import { z } from "zod";
 const url = z.url();
 const postgresUrl = z.url({ protocol: /^postgres(ql)?$/ });
 const smtpUrl = z.url({ protocol: /^smtps?$/ });
+const httpUrl = z.url({ protocol: /^https?$/ });
 const nonEmpty = z.string().min(1);
 const secret32 = z.string().min(32, "must be at least 32 characters");
 /** "true" / "false" only (a typo like "ture" is an error, not silently false). */
@@ -61,7 +62,23 @@ const schema = {
   MEILI_HOST: url,
   MEILI_API_KEY: z.string().min(16, "must be at least 16 characters"),
 
-  MEDIA_DIR: nonEmpty,
+  /** Media storage: S3-compatible object storage, Garage in every environment (decision 013). */
+  S3_ENDPOINT: httpUrl,
+  S3_REGION: nonEmpty,
+  /** S3 bucket naming rules: 3-63 characters, lower-case letters, digits, dots and hyphens. */
+  S3_BUCKET: z
+    .string()
+    .regex(
+      /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/,
+      "is not a valid S3 bucket name",
+    ),
+  S3_ACCESS_KEY_ID: nonEmpty,
+  S3_SECRET_ACCESS_KEY: nonEmpty,
+  /** Garage needs path-style requests (no bucket sub-domains); "false" only for a provider that wants virtual-host style. */
+  S3_FORCE_PATH_STYLE: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
 
   EMAIL_FROM: nonEmpty,
   SMTP_URL: smtpUrl,
@@ -92,7 +109,12 @@ const ROLE_KEYS = {
     "REGISTRATION_OPEN",
     "MEILI_HOST",
     "MEILI_API_KEY",
-    "MEDIA_DIR",
+    "S3_ENDPOINT",
+    "S3_REGION",
+    "S3_BUCKET",
+    "S3_ACCESS_KEY_ID",
+    "S3_SECRET_ACCESS_KEY",
+    "S3_FORCE_PATH_STYLE",
     "PAYMENT_GATEWAY_URL",
     "PAYMENT_GATEWAY_API_KEY",
     "PAYMENT_WEBHOOK_SECRET",
@@ -108,7 +130,12 @@ const ROLE_KEYS = {
     "DATABASE_WORKER_URL",
     "MEILI_HOST",
     "MEILI_API_KEY",
-    "MEDIA_DIR",
+    "S3_ENDPOINT",
+    "S3_REGION",
+    "S3_BUCKET",
+    "S3_ACCESS_KEY_ID",
+    "S3_SECRET_ACCESS_KEY",
+    "S3_FORCE_PATH_STYLE",
     "EMAIL_FROM",
     "SMTP_URL",
     "PAYMENT_GATEWAY_URL",
@@ -245,9 +272,27 @@ export const env = {
     return read("MEILI_API_KEY");
   },
 
-  /** Media volume path (product images, invoice PDFs); /data/media in the image. */
-  get MEDIA_DIR() {
-    return read("MEDIA_DIR");
+  /** S3 API of the media storage (product images, invoice PDFs): Garage locally and on the server. */
+  get S3_ENDPOINT() {
+    return read("S3_ENDPOINT");
+  },
+  /** Must match `s3_region` in deploy/garage/garage.toml (`garage`). */
+  get S3_REGION() {
+    return read("S3_REGION");
+  },
+  /** One bucket per environment (`horeca-media`). */
+  get S3_BUCKET() {
+    return read("S3_BUCKET");
+  },
+  /** The app key: read/write on that one bucket only (printed once by scripts/garage-setup.sh). */
+  get S3_ACCESS_KEY_ID() {
+    return read("S3_ACCESS_KEY_ID");
+  },
+  get S3_SECRET_ACCESS_KEY() {
+    return read("S3_SECRET_ACCESS_KEY");
+  },
+  get S3_FORCE_PATH_STYLE() {
+    return read("S3_FORCE_PATH_STYLE");
   },
 
   /** Sender of every e-mail, e.g. "HoReCa Marketplace <no-reply@…>". */

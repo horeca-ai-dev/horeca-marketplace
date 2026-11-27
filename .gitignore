@@ -14,8 +14,6 @@ next-env.d.ts
 .pnpm-debug.log*
 .vercel
 
-# Local media volume
-.media/
 
 # Scraped seed data (decision 012 §9) — never committed, copied to the server by hand
 .seed-private/

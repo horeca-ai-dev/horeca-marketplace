@@ -1,9 +1,10 @@
 /**
  * Health report for /api/health (D2-A4, README → Operations).
  *
- * Gates deploys on PostgreSQL + migration version ONLY. Meilisearch, Mailpit (SMTP) and the worker are
- * reported as "degraded", never blocking: search and e-mail can be down for a minute without the app
- * being broken, and a deploy must not stall on them.
+ * Gates deploys on PostgreSQL + migration version ONLY. Meilisearch, Mailpit (SMTP), Garage (media storage,
+ * decision 013) and the worker are reported as "degraded", never blocking: search, e-mail and images can be
+ * down for a minute without the app being broken, and a deploy must not stall on them (Garage is also
+ * "degraded" on a fresh environment until scripts/garage-setup.sh has run).
  *
  * Every external check has a 2 s timeout (the deploy script polls this endpoint). The response carries
  * states only — no error messages, hosts or versions (CLAUDE.md rule 16); details go to the log.
@@ -11,6 +12,7 @@
 import { connect } from "node:net";
 import { env } from "@/env.core";
 import { getLogger } from "@/server/logger";
+import { storage } from "@/server/storage";
 import {
   migrationState,
   oldestWaitingJobAgeSeconds,
@@ -31,6 +33,7 @@ export type HealthReport = {
     migrations: MigrationState | "unknown";
     search: Optional;
     mail: Optional;
+    storage: Optional;
     worker: Optional;
   };
 };
@@ -110,6 +113,18 @@ async function checkMail(): Promise<Optional> {
   });
 }
 
+/** Garage: HeadBucket with our key (the storage module's ping, 2 s timeout). Never blocks a deploy. */
+async function checkStorage(): Promise<Optional> {
+  if (!env.has("S3_ENDPOINT")) return "unknown";
+  try {
+    await withTimeout(storage.ping());
+    return "ok";
+  } catch (err) {
+    logFailure("storage", err);
+    return "degraded";
+  }
+}
+
 /** No heartbeat store: the worker is "degraded" when the oldest due job has waited > 5 minutes. */
 async function checkWorker(): Promise<Optional> {
   try {
@@ -122,15 +137,16 @@ async function checkWorker(): Promise<Optional> {
 }
 
 export async function healthReport(): Promise<HealthReport> {
-  const [db, search, mail, worker] = await Promise.all([
+  const [db, search, mail, storageState, worker] = await Promise.all([
     checkDatabase(),
     checkSearch(),
     checkMail(),
+    checkStorage(),
     checkWorker(),
   ]);
-  const checks = { ...db, search, mail, worker };
+  const checks = { ...db, search, mail, storage: storageState, worker };
   const blocking = db.database !== "ok" || db.migrations !== "ok";
-  const degraded = [search, mail, worker].some((s) => s !== "ok");
+  const degraded = [search, mail, storageState, worker].some((s) => s !== "ok");
   return {
     status: blocking ? "down" : degraded ? "degraded" : "ok",
     checks,
