@@ -152,15 +152,16 @@ The side panel becomes a **full-screen sheet**; tables collapse to **stacked row
 | Sub-order | pending → attention · „Na čekanju" · confirmed → progress · „Potvrđeno" · shipped → progress · „Poslato" · delivered → positive · „Isporučeno" · cancelled → negative · „Otkazano" |
 | Stock | in stock → positive · „Na stanju · 24 kom" · out of stock → attention · „Nema na stanju" · unknown → neutral · „Dostupnost nepoznata" (+ caption „Provjereno u 14:32") |
 | Card payment | created / pending → attention · „Čeka uplatu" · succeeded → positive · „Plaćeno" · failed → negative · „Odbijeno" · cancelled → negative · „Prekinuto" · expired → negative · „Isteklo" · refunded (partly / fully) → neutral · „Vraćeno 120,00 €" |
+| Order | in_progress → progress · „U toku" · completed → positive · „Završeno" · cancelled → negative · „Otkazano" *(D4-A2)* |
 | Order payment status | unpaid → attention · „Nije plaćeno" · paid → positive · „Plaćeno" · refund_due → attention · „Povraćaj u toku" · not_applicable → hidden (direct-only orders) |
 | Contract | requested → attention · „Zatražen" · active → positive · „Aktivan" · rejected → negative · „Odbijen" · ended → neutral · „Okončan" |
 | Purchase mode | direct → neutral · „Direktno" · platform → neutral · „Kartica" |
 | Supplier submission | pending → neutral · „Slanje u toku" · accepted → positive · „Prihvaćeno" · rejected → negative · „Odbijeno" · failed → negative · „Slanje nije uspjelo" |
 | Product | draft → neutral · „Nacrt" · active → positive · „Aktivan" · archived → neutral · „Arhiviran" |
-| Supplier organization | approved → positive · „Aktivan" · suspended → negative · „Suspendovan" *(created as approved by the admin — no pending / rejected flow)* |
+| Supplier organization | approved → positive · „Aktivan" · suspended → negative · „Suspendovan" · *enum-only, no flow:* pending → attention · „Na čekanju" · rejected → negative · „Odbijen" *(created as approved by the admin — no pending / rejected flow)* |
 | RFQ (stretch) | open → progress · quoted → attention · accepted → positive · closed → neutral |
 
-*(Sub-order states confirmed by decision 11. Labels are the starting wording; the catalogue in `messages/` is authoritative once it exists.)*
+*(Sub-order states confirmed by decision 11. The catalogue (`status.<entity>.<value>` in `messages/`) is authoritative; `StatusBadge` maps every value to a tone in `status-map.ts`, and its test fails when a schema enum value has no badge.)*
 
 ## Components (`components/ui` or `components/domain`; built from D4-A1 / D4-A2)
 | Component | Rules |
@@ -199,7 +200,7 @@ The side panel becomes a **full-screen sheet**; tables collapse to **stacked row
 |---|---|
 | Loading | skeleton with the final dimensions (table: rows of the table's height; grid: square tiles); no spinner for page content — spinners only inside a pending button |
 | Empty | EmptyState: what will be here + the next step as one action |
-| Error | what happened + what to do, from the action's `message`; a retry action where one exists; never a stack trace or an internal ID |
+| Error | what happened + what to do, from the action's `message`; a retry action where one exists; never a stack trace or an internal ID. Pages read through `loadPage()`: not found → the area's not-found page (404); forbidden → `ForbiddenPage` in place; conflict / invalid input / anything else → the area's error page (one next action) |
 | Populated | real seed data in every screenshot and demo |
 | Pending action | the button is disabled, shows a spinner and a changed label; the rest of the form stays readable |
 | Disabled | 50 % opacity **and** a text reason next to the control |
