@@ -99,19 +99,22 @@ afterAll(async () => {
 });
 
 describe("loadActor", () => {
-  it("builds the actor for a real member (buyer owner)", async () => {
+  it("builds the actor for a real member (buyer owner), with the company name", async () => {
     expect(await loadActor(buyer.userId, buyer.organizationId)).toEqual({
-      userId: buyer.userId,
-      orgId: buyer.organizationId,
-      orgType: "buyer",
-      role: "owner",
+      actor: {
+        userId: buyer.userId,
+        orgId: buyer.organizationId,
+        orgType: "buyer",
+        role: "owner",
+      },
+      orgName: "Actor buyer d.o.o.",
     });
   });
 
   it("reads the organization type from org_profiles (supplier)", async () => {
     expect(
       await loadActor(supplier.userId, supplier.organizationId),
-    ).toMatchObject({ orgType: "supplier" });
+    ).toMatchObject({ actor: { orgType: "supplier" } });
   });
 
   it("returns null for an organization the user is not a member of", async () => {

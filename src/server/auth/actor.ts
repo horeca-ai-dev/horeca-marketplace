@@ -19,7 +19,8 @@ import { Unauthenticated } from "@/server/domain/errors";
 export type SessionState =
   | { kind: "anonymous" }
   | { kind: "no-organization"; userId: string }
-  | { kind: "actor"; actor: Actor };
+  /** orgName: the company's legal name, for the header only (never for authorization). */
+  | { kind: "actor"; actor: Actor; orgName: string };
 
 export const resolveSession = cache(async (): Promise<SessionState> => {
   // headers() first: it marks the page as dynamic before anything else runs. (getAuth() reads env,
@@ -33,8 +34,10 @@ export const resolveSession = cache(async (): Promise<SessionState> => {
   if (!organizationId) return { kind: "no-organization", userId };
 
   // Never trust the session's organization on its own: re-check membership in the database.
-  const actor = await loadActor(userId, organizationId);
-  return actor ? { kind: "actor", actor } : { kind: "no-organization", userId };
+  const loaded = await loadActor(userId, organizationId);
+  return loaded
+    ? { kind: "actor", ...loaded }
+    : { kind: "no-organization", userId };
 });
 
 /** For Server Actions and pages that need a full actor. Throws Unauthenticated otherwise. */
