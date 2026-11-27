@@ -236,7 +236,8 @@
       "reason": {
         "TAX_ID_TAKEN": "Firma sa ovim PIB-om je već registrovana.",
         "EMAIL_TAKEN": "Nalog sa ovom e-mail adresom već postoji.",
-        "ALREADY_HAS_COMPANY": "Vaš nalog je već povezan sa firmom."
+        "ALREADY_HAS_COMPANY": "Vaš nalog je već povezan sa firmom.",
+        "SKU_TAKEN": "Već imate proizvod sa ovom šifrom (SKU)."
       }
     },
     "validation": {

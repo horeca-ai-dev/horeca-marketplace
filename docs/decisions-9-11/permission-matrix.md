@@ -113,8 +113,8 @@ foreign-key must equal `actor.orgId`. Every row becomes at least two tests: allo
 | `catalogue.search` (`searchProducts`) | B\*, S\*, P | — | index holds only active products of approved suppliers | — |
 | `product.view` | B\*, S\*, P | visible = active + approved supplier, or own, or P | — | — |
 | `product.list` (dashboard) | S\* | own | — | — |
-| `product.create` / `.update` | S\* | own | supplier not `suspended`; leaf category; attributes valid | — |
-| `product.setStatus` (activate / draft / archive) | S\* | own | supplier not `suspended` | — |
+| `product.create` / `.update` | S\* | own | supplier not `suspended`; active leaf category; VAT rate from settings; attributes valid; `.update`: product not `archived` | — |
+| `product.setStatus` (activate / draft / archive / restore) | S\* | own | supplier not `suspended`; legal transition (`product-status.ts`); activate: all required attributes present | — |
 | `product.moderate` (archive only) | P | — | product not archived | ✓ |
 | `productImage.upload` / `.delete` / `.reorder` | S\* | own product | supplier not `suspended`; ≤ 8 images | — |
 | `csvImport.upload` / `.confirm` / `.cancel` | S\* | own | supplier not `suspended`; one active import | — |
