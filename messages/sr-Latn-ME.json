@@ -220,5 +220,36 @@
   "toast": {
     "region": "Obavještenja ({hotkey})",
     "close": "Zatvorite obavještenje"
+  },
+  "errors": {
+    "notFound": {
+      "title": "Stranica nije pronađena",
+      "message": "Ova stranica ne postoji ili Vam nije dostupna. Provjerite adresu ili se vratite na početnu stranicu."
+    },
+    "forbidden": {
+      "title": "Nemate pristup",
+      "message": "Vaša uloga u firmi ne dozvoljava ovu radnju. Ako Vam je potrebna, obratite se vlasniku naloga Vaše firme."
+    },
+    "conflict": {
+      "title": "Prikaz trenutno nije moguć",
+      "message": "Podaci su se u međuvremenu promijenili. Pokušajte ponovo.",
+      "reason": {
+        "TAX_ID_TAKEN": "Firma sa ovim PIB-om je već registrovana.",
+        "EMAIL_TAKEN": "Nalog sa ovom e-mail adresom već postoji.",
+        "ALREADY_HAS_COMPANY": "Vaš nalog je već povezan sa firmom."
+      }
+    },
+    "validation": {
+      "title": "Podaci nisu ispravni",
+      "message": "Adresa stranice sadrži neispravne podatke. Vratite se na početnu stranicu i pokušajte ponovo."
+    },
+    "unexpected": {
+      "title": "Nešto nije u redu",
+      "message": "Nismo uspjeli da prikažemo ovu stranicu. Pokušajte ponovo za nekoliko trenutaka."
+    },
+    "actions": {
+      "retry": "Pokušajte ponovo",
+      "home": "Idite na početnu stranicu"
+    }
   }
 }
