@@ -74,6 +74,17 @@ Apply `rls.sql` (MVP part) with these edits (line numbers refer to the file in t
 - Remove `thumb_key` from any image fixtures.
 Run the edited test file via `psql` in CI **against the real migrations**: init script → migrate entry (Drizzle migrations + pg-boss schema) → `psql -f rls_tests.sql` as the superuser. Do **not** use `run_db_tests.sh` in CI — it builds the database from the drafts in `drizzle/mvp/*.sql` (which still contain `invoice_counters`, `thumb_key` and the trigram index). Adapt the fixture rows for `user`, `organization` and `member` to the columns the Better Auth CLI generates (D2-B2).
 
+### D5-B3a · product services (`src/server/domain/products.ts`)
+`createProduct`, `updateProduct`, `setProductStatus`, `getProduct`, `listProducts` — all `(tx, actor, input)`, input validated again in the domain (`src/lib/schemas/product.ts`, strict), attribute schema generated from the category's definitions (`attributes.ts`). **Decided in D5-B3a (27.11):**
+- **Status machine** (`product-status.ts`): `draft ⇄ active`, `draft | active → archived`, `archived → draft` (restore) — never straight from `archived` to `active`.
+- **Required attributes only matter for `active`:** a draft may be incomplete; activating — and editing a product that is already active — needs every required attribute.
+- **The SKU never changes after creation** (it is the key of the CSV upsert and is copied into order lines); a duplicate is `Conflict` with the new reason `SKU_TAKEN`. An update replaces all editable fields (no partial patch).
+- **An archived product cannot be edited**, only restored to `draft`.
+- **Attribute values of a definition the admin has deactivated are kept** on update (existing data survives); they cannot be set or changed by the supplier.
+- A **suspended supplier gets a `Conflict` (409)** on create / update / status change — RLS would only answer "0 rows".
+- `getProduct` follows RLS visibility (own in any status; others' only when active and the supplier is approved); `listProducts` is the supplier dashboard (own products, status filter, SKU / name search with `%` and `_` escaped, paging) and reads Postgres only (rule 12).
+- **Not included:** the Meilisearch sync job (D7-B3 enqueues it in these transactions), Server Actions, screens, image upload (D6-B0).
+
 ### D6-B2 · stuck CSV imports
 The worker login has only SELECT on `csv_imports`, so status changes happen in the **supplier's context**: the import job runs as `horeca_app` with the supplier actor (captured at enqueue time) and sets `failed` on error; an import still "running" after 30 minutes is marked failed when the supplier opens the imports page or starts a new import; Cancel is a supplier action. CSV: decimal comma only in `;` files.
 

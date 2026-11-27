@@ -57,6 +57,7 @@ export const CONFLICT_REASONS = [
   "TAX_ID_TAKEN",
   "EMAIL_TAKEN",
   "ALREADY_HAS_COMPANY",
+  "SKU_TAKEN",
 ] as const;
 export type ConflictReason = (typeof CONFLICT_REASONS)[number];
 
