@@ -51,7 +51,8 @@ fi
 
 # 2 ── the login page renders ──────────────────────────────────────────────────────────────────────
 code="$(http "$base/login")"
-if [[ $code == 200 ]] && grep -q 'autocomplete="current-password"' "$body"; then
+# -i: React writes the attribute as autoComplete="…" (HTML attribute names are case-insensitive).
+if [[ $code == 200 ]] && grep -qi 'autocomplete="current-password"' "$body"; then
   pass "2 /login → 200 with the password field"
 else
   fail "2 /login → $code (expected 200 with the login form)"
