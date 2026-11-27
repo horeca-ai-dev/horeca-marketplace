@@ -251,5 +251,14 @@
       "retry": "Pokušajte ponovo",
       "home": "Idite na početnu stranicu"
     }
+  },
+  "table": {
+    "actions": "Radnje",
+    "moreActions": "Još radnji: {row}",
+    "pagination": "Stranice",
+    "pageOf": "Strana {page} od {count}",
+    "previous": "Prethodna",
+    "next": "Sljedeća",
+    "closePanel": "Zatvorite detalje"
   }
 }
