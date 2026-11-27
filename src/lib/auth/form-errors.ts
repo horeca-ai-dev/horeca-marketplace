@@ -8,6 +8,7 @@
  * Why keys and not the server's text: the server's messages are English; users read Montenegrin.
  */
 import type { z } from "zod";
+import type { ConflictReason } from "@/server/domain/errors";
 
 export const ACCOUNT_FIELDS = ["name", "email", "password"] as const;
 export const COMPANY_FIELDS = [
@@ -35,7 +36,7 @@ export type FieldErrorKey =
   | `auth.errors.${TakenField}.taken`;
 
 export type FormErrorKey =
-  `auth.errors.form.${"invalidCredentials" | "rateLimited" | "registrationClosed" | "alreadyHasCompany" | "validation" | "generic"}`;
+  `auth.errors.form.${"invalidCredentials" | "rateLimited" | "registrationClosed" | "validation" | "generic"}`;
 
 /** React Hook Form error `type` the forms set for a 409 on a field. */
 export const TAKEN = "taken";
@@ -65,33 +66,23 @@ export function fieldErrorKey(
 /**
  * Server Action errors (the `serverError` of src/server/actions/safe-action.ts).
  *
- * TODO(Member B — issue "Stable reason codes on registration conflicts"): the three 409s differ only
- * by their English message, so they are matched by exact text here. When `Conflict` carries a
- * `reason` that handleServerError passes through, replace CONFLICT_MESSAGES with a switch on it.
- * Until then form-errors.test.ts fails if one of these texts disappears from the server code.
+ * A 409 is told apart by its `reason` (ConflictReason), never by its English message. A conflict
+ * without a reason we know gets the generic Montenegrin message.
  */
-export const CONFLICT_MESSAGES = {
-  "A buyer with this tax ID (PIB) is already registered.": "TAX_ID_TAKEN",
-  "An account with this e-mail already exists. Please log in.": "EMAIL_TAKEN",
-  "This account already belongs to a company.": "ALREADY_HAS_COMPANY",
-} as const;
-
 export type ActionFailure =
   | { reason: "TAX_ID_TAKEN"; field: "taxId" }
   | { reason: "EMAIL_TAKEN"; field: "email" }
+  /** The user already has a company: the form sends them to their area (via /login). */
+  | { reason: "ALREADY_HAS_COMPANY" }
   /** No session (any more): the form sends the user to the login page. */
   | { reason: "UNAUTHENTICATED" }
   | {
-      reason:
-        | "ALREADY_HAS_COMPANY"
-        | "REGISTRATION_CLOSED"
-        | "VALIDATION"
-        | "UNKNOWN";
+      reason: "REGISTRATION_CLOSED" | "VALIDATION" | "UNKNOWN";
       formKey: FormErrorKey;
     };
 
 export function mapActionError(
-  error: { code: string; message: string } | undefined,
+  error: { code: string; message: string; reason?: ConflictReason } | undefined,
 ): ActionFailure {
   const unknown: ActionFailure = {
     reason: "UNKNOWN",
@@ -100,20 +91,17 @@ export function mapActionError(
   if (!error) return unknown;
 
   switch (error.code) {
-    case "CONFLICT": {
-      const reason = (
-        CONFLICT_MESSAGES as Record<
-          string,
-          (typeof CONFLICT_MESSAGES)[keyof typeof CONFLICT_MESSAGES]
-        >
-      )[error.message];
-      if (reason === "TAX_ID_TAKEN") return { reason, field: "taxId" };
-      if (reason === "EMAIL_TAKEN") return { reason, field: "email" };
-      if (reason === "ALREADY_HAS_COMPANY") {
-        return { reason, formKey: "auth.errors.form.alreadyHasCompany" };
+    case "CONFLICT":
+      switch (error.reason) {
+        case "TAX_ID_TAKEN":
+          return { reason: "TAX_ID_TAKEN", field: "taxId" };
+        case "EMAIL_TAKEN":
+          return { reason: "EMAIL_TAKEN", field: "email" };
+        case "ALREADY_HAS_COMPANY":
+          return { reason: "ALREADY_HAS_COMPANY" };
+        default:
+          return unknown;
       }
-      return unknown;
-    }
     case "UNAUTHENTICATED":
       return { reason: "UNAUTHENTICATED" };
     // The registration actions answer 403 for one reason only: REGISTRATION_OPEN=false.
