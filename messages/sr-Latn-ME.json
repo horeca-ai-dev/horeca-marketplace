@@ -55,7 +55,8 @@
       "forgotPassword": "Zaboravili ste lozinku?",
       "noAccount": "Nemate nalog?",
       "registerLink": "Registrujte firmu",
-      "accountCreatedNotice": "Nalog je kreiran — prijavite se da završite registraciju."
+      "accountCreatedNotice": "Nalog je kreiran — prijavite se da završite registraciju.",
+      "passwordResetNotice": "Lozinka je promijenjena — prijavite se novom lozinkom."
     },
     "register": {
       "title": "Registracija firme",
@@ -79,7 +80,23 @@
       "submitting": "Čuvamo podatke…"
     },
     "forgotPassword": {
-      "title": "Zaboravljena lozinka"
+      "title": "Zaboravljena lozinka",
+      "description": "Unesite e-mail adresu naloga. Poslaćemo Vam link za postavljanje nove lozinke.",
+      "submit": "Pošaljite link",
+      "submitting": "Šaljemo…",
+      "sentTitle": "Provjerite e-mail",
+      "sent": "Ako postoji nalog sa adresom {email}, poslali smo na nju link za postavljanje nove lozinke. Link važi jedan sat.",
+      "sentHint": "Ne vidite poruku? Provjerite neželjenu poštu ili zatražite novi link.",
+      "tryAgain": "Zatražite novi link"
+    },
+    "resetPassword": {
+      "title": "Nova lozinka",
+      "description": "Unesite novu lozinku za svoj nalog.",
+      "submit": "Sačuvajte lozinku",
+      "submitting": "Čuvamo lozinku…",
+      "invalidLinkTitle": "Link nije ispravan",
+      "invalidLink": "Link za postavljanje nove lozinke je neispravan, već je iskorišćen ili je istekao.",
+      "requestNewLink": "Zatražite novi link"
     },
     "fields": {
       "name": { "label": "Ime i prezime" },
@@ -96,7 +113,9 @@
       "city": { "label": "Grad" },
       "postalCode": { "label": "Poštanski broj", "help": "5 cifara." },
       "contactEmail": { "label": "Kontakt e-mail firme" },
-      "contactPhone": { "label": "Kontakt telefon (opciono)" }
+      "contactPhone": { "label": "Kontakt telefon (opciono)" },
+      "newPassword": { "label": "Nova lozinka" },
+      "passwordConfirm": { "label": "Ponovite novu lozinku" }
     },
     "errors": {
       "summaryTitle": "Provjerite sljedeća polja:",
@@ -105,6 +124,7 @@
         "rateLimited": "Previše pokušaja — pokušajte ponovo za minut.",
         "registrationClosed": "Registracija je trenutno zatvorena.",
         "validation": "Provjerite označena polja.",
+        "invalidResetLink": "Link za postavljanje nove lozinke je neispravan ili je istekao. Zatražite novi.",
         "generic": "Nešto nije u redu. Pokušajte ponovo."
       },
       "name": {
@@ -119,6 +139,10 @@
       "password": {
         "required": "Unesite lozinku.",
         "invalid": "Lozinka mora imati između 8 i 128 znakova."
+      },
+      "passwordConfirm": {
+        "required": "Ponovite novu lozinku.",
+        "mismatch": "Lozinke se ne poklapaju."
       },
       "legalName": {
         "required": "Unesite pravni naziv firme.",

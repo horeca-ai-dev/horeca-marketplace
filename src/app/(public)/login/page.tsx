@@ -19,13 +19,21 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
     <div className="flex flex-col gap-8">
       <h1 className="text-2xl">{t("login.title")}</h1>
-      {/* Only this one known value shows a notice — never text taken from the URL. */}
+      {/* Only these known values show a notice — never text taken from the URL. */}
       {notice === "account-created" ? (
         <p
           role="status"
           className="rounded-md bg-attention-bg p-3 text-sm text-attention-text"
         >
           {t("login.accountCreatedNotice")}
+        </p>
+      ) : null}
+      {notice === "password-reset" ? (
+        <p
+          role="status"
+          className="rounded-md bg-positive-bg p-3 text-sm text-positive-text"
+        >
+          {t("login.passwordResetNotice")}
         </p>
       ) : null}
       <LoginForm />

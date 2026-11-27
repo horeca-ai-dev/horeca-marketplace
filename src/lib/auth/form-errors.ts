@@ -36,7 +36,7 @@ export type FieldErrorKey =
   | `auth.errors.${TakenField}.taken`;
 
 export type FormErrorKey =
-  `auth.errors.form.${"invalidCredentials" | "rateLimited" | "registrationClosed" | "validation" | "generic"}`;
+  `auth.errors.form.${"invalidCredentials" | "rateLimited" | "registrationClosed" | "validation" | "invalidResetLink" | "generic"}`;
 
 /** React Hook Form error `type` the forms set for a 409 on a field. */
 export const TAKEN = "taken";
@@ -127,6 +127,45 @@ export function signInErrorKey(error: {
     return "auth.errors.form.invalidCredentials";
   }
   return "auth.errors.form.generic";
+}
+
+/**
+ * Better Auth's client error for POST /request-password-reset (D5-A2). Its answer for a known and an
+ * unknown address is the same 200, so the only errors are about the request itself — never about
+ * whether an account exists.
+ */
+export function requestResetErrorKey(error: { status?: number }): FormErrorKey {
+  return error.status === 429
+    ? "auth.errors.form.rateLimited"
+    : "auth.errors.form.generic";
+}
+
+/** Better Auth's client error for POST /reset-password (D5-A2). */
+export function resetPasswordErrorKey(error: {
+  status?: number;
+  code?: string;
+}): FormErrorKey {
+  if (error.status === 429) return "auth.errors.form.rateLimited";
+  // Expired, already used or made-up token. (USER_NOT_FOUND: the account was deleted meanwhile —
+  // for the user the link is just as dead.)
+  if (error.code === "INVALID_TOKEN" || error.code === "USER_NOT_FOUND") {
+    return "auth.errors.form.invalidResetLink";
+  }
+  if (
+    error.code === "PASSWORD_TOO_SHORT" ||
+    error.code === "PASSWORD_TOO_LONG"
+  ) {
+    return "auth.errors.form.validation";
+  }
+  return "auth.errors.form.generic";
+}
+
+/** The "repeat the password" field: empty, or not the same as the new password. */
+export function passwordConfirmErrorKey(
+  value: unknown,
+): `auth.errors.passwordConfirm.${"required" | "mismatch"}` {
+  const empty = typeof value !== "string" || value === "";
+  return `auth.errors.passwordConfirm.${empty ? "required" : "mismatch"}`;
 }
 
 /**

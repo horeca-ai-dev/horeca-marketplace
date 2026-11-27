@@ -20,6 +20,10 @@ vi.mock("@/server/actions/registration", () => ({
 
 const { LoginForm } = await import("@/app/(public)/login/login-form");
 const { RegisterForm } = await import("@/app/(public)/register/register-form");
+const { ForgotPasswordForm } =
+  await import("@/app/(public)/forgot-password/forgot-password-form");
+const { ResetPasswordForm } =
+  await import("@/app/(public)/reset-password/reset-password-form");
 
 function render(component: ComponentType) {
   // The provider's props type requires `children`, so it goes in the props object.
@@ -61,6 +65,21 @@ describe("auth forms: autocomplete attributes", () => {
       "company.postalCode": "postal-code",
       "company.contactEmail": "email",
       "company.contactPhone": "tel",
+    });
+  });
+
+  test("forgot password", () => {
+    expect(autocompleteByName(render(ForgotPasswordForm))).toEqual({
+      email: "email",
+    });
+  });
+
+  test("reset password: both fields are a new password", () => {
+    const ResetForToken = () =>
+      createElement(ResetPasswordForm, { token: "t" });
+    expect(autocompleteByName(render(ResetForToken))).toEqual({
+      password: "new-password",
+      passwordConfirm: "new-password",
     });
   });
 
