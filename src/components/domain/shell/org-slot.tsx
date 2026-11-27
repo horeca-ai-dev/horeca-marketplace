@@ -3,8 +3,9 @@
  * of the area and the company name — "Kupac · Hotel Primorje". The platform shows its type only.
  *
  * The name comes from the area layout (requireArea → resolveSession), so the shell itself reads
- * nothing. The organization switcher is not here: in the MVP a user belongs to one organization;
- * it arrives with S7 member invitations (TASKS.md).
+ * nothing. The organization switcher is postponed by decision to D7-A3 — not because nobody has two
+ * organizations (the seed's multi@demo.local is buyer + supplier), but because listing a user's
+ * organizations needs new domain / RLS code first (B's listMyOrganizations).
  */
 import { OrgBadge, type OrgType } from "@/components/domain/org-badge";
 import type { Area } from "./nav";
