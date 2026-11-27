@@ -18,6 +18,9 @@
 # TODO(D5-A1): pre-deploy dumps (keep 5) are taken by deploy.sh production, not here.
 # Meilisearch is not backed up: it is rebuilt from Postgres (pnpm search:reindex).
 set -euo pipefail
+# Run from / : started with `sudo -u deploy` from another user's home, the inherited working directory
+# is unreadable to deploy and find (and others) fail to restore it. Every path below is absolute.
+cd /
 
 readonly ROOT=/opt/horeca
 readonly KEEP=7
