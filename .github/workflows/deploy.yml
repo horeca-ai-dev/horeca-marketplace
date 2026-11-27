@@ -5,11 +5,15 @@
 #                   → ssh deploy@server "staging <sha>" (the key is forced to run deploy.sh)
 #   smoke-staging   fresh runner, NOT on the tailnet → scripts/smoke-g0.sh via public DNS, so it
 #                   tests the real public path through both proxies
-#   production      TODO(D5-A1)
+#   deploy-production  Environment "production" = MANUAL APPROVAL (required reviewers) → the SAME image
+#                   → ssh deploy@server "production <sha>" (pre-deploy pg_dump → migrate → health gate)
+#   smoke-production   fresh runner, public DNS → scripts/smoke-production.sh (read-only: no test data)
+#   release         scripts/next-version.sh → tag vX.Y.Z on the deployed SHA + GitHub Release
 #
 # The PR's CI (ci.yml) has already passed before anything reaches main. Every action is pinned to a
 # full commit SHA (tag in the comment), each release at least two weeks old when chosen.
-# Secrets (GitHub → Settings → Environments → staging): README → Deployment → "GitHub setup".
+# Secrets (GitHub → Settings → Environments → staging / production): README → Deployment → "GitHub setup".
+# Rollback: re-run deploy-production of the run that built the previous SHA (README → Rollback).
 name: Deploy
 
 on:
@@ -135,11 +139,119 @@ jobs:
           SMOKE_BASIC_AUTH_PASS: ${{ secrets.STAGING_BASIC_AUTH_PASS }}
         run: scripts/smoke-g0.sh
 
-  # TODO(D5-A1): production half —
-  #   deploy-production:
-  #     needs: deploy-staging
-  #     environment: production          # required reviewers: both team members (approval gate)
-  #     concurrency: { group: production, cancel-in-progress: false }
-  #     permissions: { contents: write, id-token: write }   # contents: write for the release tag
-  #     steps: tailscale (same inputs, production Environment secrets) → ssh "production <sha>"
-  #            (deploy.sh: pre-deploy pg_dump → migrate → health) → tag vX.Y.Z + GitHub Release
+  deploy-production:
+    name: deploy production
+    needs: smoke-staging # nothing reaches production without passing staging
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20 # + the time the approval waits (not counted)
+    # The Environment's required reviewers are the approval gate; the job starts only after one of
+    # them approves. OIDC subject repo:…:environment:production (trusted by the same Tailscale credential).
+    environment:
+      name: production
+      url: https://horeca.bogdandelic.online
+    # One production deploy at a time and NEVER cancelled halfway (pre-deploy dump, migrations). A newer
+    # run waiting in this group replaces an older one that is still waiting for approval.
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # Tailscale federated identity (workload identity federation)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Join the tailnet
+        uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:ci
+
+      # Same steps as deploy-staging (kept as a copy so the staging job stays untouched); the image is
+      # the one built above for this SHA and already running on staging.
+      - name: Deploy (deploy.sh production <sha>)
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          SHA: ${{ github.sha }}
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts_deploy
+          ssh -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts_deploy" \
+            -o ConnectTimeout=20 \
+            "deploy@${DEPLOY_HOST}" "production ${SHA}"
+
+      - name: Remove the SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts_deploy
+
+  smoke-production:
+    name: smoke test production
+    needs: deploy-production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Fresh runner, never on the tailnet, public DNS — the visitor's path. No Environment: production
+    # has no basic auth, so this job needs no secrets. Read-only checks (no sign-up, no test data).
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Production smoke test (through both proxies)
+        env:
+          SMOKE_BASE_URL: https://horeca.bogdandelic.online
+        run: scripts/smoke-production.sh
+
+  release:
+    name: tag the release
+    needs: smoke-production # only versions that passed production get a tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # create the tag and the GitHub Release with GITHUB_TOKEN — nothing else
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # full history and all tags for next-version.sh
+
+      # Empty output = nothing to release (already tagged, rollback, or no feat/fix since the last tag).
+      - name: Next version
+        id: version
+        env:
+          SHA: ${{ github.sha }}
+        run: scripts/next-version.sh "$SHA" >> "$GITHUB_OUTPUT"
+
+      # The tag is created through the REST API with the workflow token (gh reads GH_TOKEN), so the
+      # token never appears in a git remote URL. A tag pushed with GITHUB_TOKEN starts no other workflow.
+      - name: Create the tag and the GitHub Release
+        if: steps.version.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          BASE: ${{ steps.version.outputs.base }}
+          SHA: ${{ github.sha }}
+        run: |
+          range="$SHA"
+          if [[ -n $BASE ]]; then range="$BASE..$SHA"; fi
+          {
+            # shellcheck disable=SC2016 # the backticks are Markdown, not a command substitution
+            printf 'Deployed to production: `%s`\n\n## Commits\n\n' "$SHA"
+            git log --no-merges --format='- %s (%h)' "$range"
+          } > "$RUNNER_TEMP/notes.md"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/tags/${TAG}" -f sha="$SHA" > /dev/null
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+          echo "Released $TAG ($SHA)" >> "$GITHUB_STEP_SUMMARY"
