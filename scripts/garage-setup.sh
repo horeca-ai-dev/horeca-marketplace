@@ -9,8 +9,13 @@
 # the container's config and GARAGE_RPC_SECRET. Commands checked against Garage v2.5.0 (`garage <cmd> --help`).
 #
 # Local:   scripts/garage-setup.sh                 (uses docker-compose.dev.yml)
-# Server:  COMPOSE_FILE=… COMPOSE_PROJECT_NAME=horeca-<env> scripts/garage-setup.sh
-#          (Compose reads both variables itself; set up on the server with the D5 task)
+# Server:  installed as /opt/horeca/bin/garage-setup.sh; run by an admin user (docker needs root):
+#            sudo env COMPOSE_FILE=/opt/horeca/deploy/compose.yml COMPOSE_PROJECT_NAME=horeca-staging \
+#              ENV_FILE=/opt/horeca/staging/.env IMAGE_TAG="$(cat /opt/horeca/staging/deployed-sha)" \
+#              /opt/horeca/bin/garage-setup.sh
+#          (production: the same with horeca-production and /opt/horeca/production/). Compose reads
+#          COMPOSE_FILE / COMPOSE_PROJECT_NAME itself; ENV_FILE becomes --env-file; IMAGE_TAG is only
+#          needed because compose.yml requires it to interpolate the file.
 # Options (env): GARAGE_BUCKET (horeca-media), GARAGE_KEY_NAME (horeca-app), GARAGE_ZONE (dc1),
 #                GARAGE_CAPACITY (1G — the node's share of the layout; Garage uses it to place data)
 set -euo pipefail
@@ -22,8 +27,28 @@ key_name="${GARAGE_KEY_NAME:-horeca-app}"
 zone="${GARAGE_ZONE:-dc1}"
 capacity="${GARAGE_CAPACITY:-1G}"
 
+compose_args=()
+if [[ -n "${ENV_FILE:-}" ]]; then
+  [[ -r "$ENV_FILE" ]] || {
+    echo "ENV_FILE=$ENV_FILE is not readable" >&2
+    exit 1
+  }
+  compose_args=(--env-file "$ENV_FILE")
+fi
+# The command that shows the key's secret again (printed as a hint only, never run here).
+show_secret_cmd="COMPOSE_FILE=$COMPOSE_FILE"
+if [[ -n "${COMPOSE_PROJECT_NAME:-}" ]]; then
+  show_secret_cmd+=" COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME"
+fi
+if [[ -n "${ENV_FILE:-}" ]]; then
+  show_secret_cmd+=" IMAGE_TAG=<deployed sha> docker compose --env-file $ENV_FILE"
+else
+  show_secret_cmd+=" docker compose"
+fi
+show_secret_cmd+=" exec garage /garage key info --show-secret $key_name"
+
 garage() {
-  docker compose exec -T garage /garage "$@"
+  docker compose "${compose_args[@]}" exec -T garage /garage "$@"
 }
 
 # --- 1. Layout ---------------------------------------------------------------------------------
@@ -84,7 +109,7 @@ if [[ -n "$created_key" ]]; then
   secret="$(sed -n 's/^Secret key: *//p' <<<"$created_key")"
   if [[ -z "$key_id" || -z "$secret" ]]; then
     echo "Key created, but its ID / secret could not be read. Show it with:" >&2
-    echo "  COMPOSE_FILE=$COMPOSE_FILE docker compose exec garage /garage key info --show-secret $key_name" >&2
+    echo "  $show_secret_cmd" >&2
     exit 1
   fi
   echo
@@ -93,5 +118,5 @@ if [[ -n "$created_key" ]]; then
   echo "S3_SECRET_ACCESS_KEY=$secret"
 else
   echo
-  echo "Lost the secret? COMPOSE_FILE=$COMPOSE_FILE docker compose exec garage /garage key info --show-secret $key_name"
+  echo "Lost the secret? $show_secret_cmd"
 fi
