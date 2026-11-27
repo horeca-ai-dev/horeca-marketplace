@@ -1,7 +1,7 @@
 # Server Compose file (D3-A2) — ONE file for every environment; the values come from
 # /opt/horeca/<env>/.env (template: deploy/env.staging.example). Never edited per environment.
 #
-# Installed by hand: copy deploy/compose.yml and deploy/postgres/ to /opt/horeca/deploy/ on the server
+# Installed by hand: copy deploy/compose.yml, deploy/postgres/ and deploy/garage/ to /opt/horeca/deploy/ on the server
 # (README → Deployment → "One-time server setup"). Re-copy them whenever they change in the repo —
 # the server does NOT pull them from Git, so they can drift (checked by hand in the PR checklist).
 #
@@ -10,8 +10,8 @@
 #   production  project horeca-production   web 127.0.0.1:3102   Mailpit UI 127.0.0.1:8127   (D5-A1)
 #   (host ports = WEB_PORT / MAILPIT_UI_PORT in .env; both sites sit behind our Nginx on :8081)
 #
-# Rules (CLAUDE.md → Infrastructure): every ports entry starts with 127.0.0.1; Postgres and Meilisearch
-# have no ports; mem_limit and log rotation on every container; each container gets ONLY the variables
+# Rules (CLAUDE.md → Infrastructure): every ports entry starts with 127.0.0.1; Postgres, Meilisearch
+# and Garage have no ports; mem_limit and log rotation on every container; each container gets ONLY the variables
 # its entry point needs (DATABASE_WORKER_URL → worker only, DATABASE_MIGRATE_URL → migrate only).
 # Image versions are the same exact pins as docker-compose.dev.yml.
 name: horeca-${APP_ENV:?set APP_ENV}
@@ -39,7 +39,16 @@ x-app-env: &app-env
   AI_ENABLED: ${AI_ENABLED:-false}
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
   ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
-  # MEDIA_DIR (/data/media), MIGRATIONS_DIR and PLAYWRIGHT_BROWSERS_PATH are set by the image.
+  # Media in the environment's own Garage (decision 013). Passed already so D5-B3 (storage module on
+  # S3) needs no Compose change; the key pair is printed once by scripts/garage-setup.sh.
+  S3_ENDPOINT: ${S3_ENDPOINT:?set S3_ENDPOINT}
+  S3_REGION: ${S3_REGION:?set S3_REGION}
+  S3_BUCKET: ${S3_BUCKET:?set S3_BUCKET}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY}
+  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+  # MIGRATIONS_DIR and PLAYWRIGHT_BROWSERS_PATH are set by the image. So is MEDIA_DIR — no volume
+  # behind it any more; nothing writes media until D5-B3, which removes it from env.core.ts.
 
 x-app: &app
   image: ghcr.io/horeca-ai-dev/horeca-marketplace:${IMAGE_TAG:?IMAGE_TAG is set by deploy.sh}
@@ -58,8 +67,6 @@ services:
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?set PAYMENT_WEBHOOK_SECRET}
     ports:
       - "127.0.0.1:${WEB_PORT:?set WEB_PORT}:3000"
-    volumes:
-      - media:/data/media
     mem_limit: ${WEB_MEM_LIMIT:-384m}
     depends_on:
       postgres:
@@ -82,8 +89,6 @@ services:
     environment:
       <<: *app-env
       DATABASE_WORKER_URL: ${DATABASE_WORKER_URL:?set DATABASE_WORKER_URL}
-    volumes:
-      - media:/data/media
     mem_limit: ${WORKER_MEM_LIMIT:-768m} # Chromium renders PDFs here
     depends_on:
       postgres:
@@ -164,11 +169,35 @@ services:
       retries: 10
     logging: *logging
 
+  # S3-compatible media storage (decision 013), internal only: NO ports entry — web and worker reach it
+  # as http://garage:3900. Unhealthy until scripts/garage-setup.sh has run once per environment
+  # (layout, bucket, key), so nothing depends_on it: deploys never wait for Garage; /api/health
+  # reports it as degraded. deploy.sh starts it on every deploy.
+  garage:
+    image: dxflrs/garage:v2.5.0
+    restart: unless-stopped
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set GARAGE_RPC_SECRET (openssl rand -hex 32)}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN}
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro # the same file as local (deploy/garage/)
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    mem_limit: ${GARAGE_MEM_LIMIT:-128m}
+    healthcheck:
+      # The image has no shell or curl; exits 1 while the cluster is unavailable (also before setup).
+      test: ["CMD", "/garage", "health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging: *logging
+
   # TODO(D6-A3): mock-services (4th entry of the image) — card gateway + supplier stock API, routed by
   # our Nginx at /gateway/. Until then PAYMENT_GATEWAY_URL / SUPPLIER_API_URL point at nothing.
 
-# Named per project (horeca-staging_media, …): staging and production never share a volume.
+# Named per project (horeca-staging_garage-data, …): staging and production never share a volume.
 volumes:
   postgres-data:
   meili-data:
-  media:
+  garage-meta:
+  garage-data:

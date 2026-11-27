@@ -7,12 +7,14 @@
 #
 #   staging <sha>          pull → migrate → up web + worker → wait for /api/health → prune images
 #   staging-reset <sha>    the same, after `down --volumes`: DELETES all staging data (database,
-#                          search index, media). The Postgres init script runs only on an EMPTY
-#                          volume, so this is also how changed database passwords take effect.
+#                          search index, Garage with its bucket AND key). The Postgres init script runs
+#                          only on an EMPTY volume, so this is also how changed database passwords take
+#                          effect. Afterwards run scripts/garage-setup.sh again, put the new S3 key pair
+#                          into .env and deploy again (README → One-time server setup → Garage).
 #   production <sha>       refused until D5-A1
 #
 # <sha> = the full 40-character commit SHA = the image tag CI pushed to GHCR.
-# Files: /opt/horeca/deploy/{compose.yml,postgres/init/} (copied from the repo's deploy/ by hand),
+# Files: /opt/horeca/deploy/{compose.yml,postgres/init/,garage/garage.toml} (copied from the repo's deploy/ by hand),
 #        /opt/horeca/<env>/.env (secrets), /opt/horeca/<env>/deploy.log, /opt/horeca/<env>/deployed-sha.
 set -euo pipefail
 
@@ -83,9 +85,10 @@ if [[ $reset == true ]]; then
 fi
 
 # ── 4. Infrastructure up (on an empty volume Postgres runs the init script now) ─────────────────
-# Only Postgres gates the deploy; Meilisearch and Mailpit are "degraded" in /api/health, never blocking.
+# Only Postgres gates the deploy; Meilisearch, Mailpit and Garage are "degraded" in /api/health, never
+# blocking. Garage is NOT waited for: it stays unhealthy until scripts/garage-setup.sh has run once.
 compose up --detach --wait postgres
-compose up --detach meilisearch mailpit
+compose up --detach meilisearch mailpit garage
 
 # ── 5. Migrations (one-off; exits non-zero on failure → the deploy stops, old app keeps running) ─
 log "migrate"
