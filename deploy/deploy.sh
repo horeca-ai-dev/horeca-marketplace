@@ -17,6 +17,9 @@
 # Files: /opt/horeca/deploy/{compose.yml,postgres/init/,garage/garage.toml} (copied from the repo's deploy/ by hand),
 #        /opt/horeca/<env>/.env (secrets), /opt/horeca/<env>/deploy.log, /opt/horeca/<env>/deployed-sha.
 set -euo pipefail
+# Run from / : started with `sudo -u deploy` from another user's home, the inherited working directory
+# is unreadable to deploy and find (and others) fail to restore it. Every path below is absolute.
+cd /
 
 readonly ROOT=/opt/horeca
 readonly DEPLOY_DIR="$ROOT/deploy"
