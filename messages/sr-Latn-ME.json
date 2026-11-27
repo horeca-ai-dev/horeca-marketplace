@@ -104,7 +104,6 @@
         "invalidCredentials": "E-mail adresa ili lozinka nisu ispravni.",
         "rateLimited": "Previše pokušaja — pokušajte ponovo za minut.",
         "registrationClosed": "Registracija je trenutno zatvorena.",
-        "alreadyHasCompany": "Ovaj nalog je već povezan sa firmom.",
         "validation": "Provjerite označena polja.",
         "generic": "Nešto nije u redu. Pokušajte ponovo."
       },

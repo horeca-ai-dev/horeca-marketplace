@@ -1,8 +1,6 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { companySchema, registrationSchema } from "@/lib/schemas/registration";
 import {
-  CONFLICT_MESSAGES,
   TAKEN,
   fieldErrorKey,
   fieldId,
@@ -30,7 +28,8 @@ describe("mapActionError", () => {
     expect(
       mapActionError({
         code: "CONFLICT",
-        message: "A buyer with this tax ID (PIB) is already registered.",
+        message: "x",
+        reason: "TAX_ID_TAKEN",
       }),
     ).toEqual({ reason: "TAX_ID_TAKEN", field: "taxId" });
   });
@@ -39,26 +38,34 @@ describe("mapActionError", () => {
     expect(
       mapActionError({
         code: "CONFLICT",
-        message: "An account with this e-mail already exists. Please log in.",
+        message: "x",
+        reason: "EMAIL_TAKEN",
       }),
     ).toEqual({ reason: "EMAIL_TAKEN", field: "email" });
   });
 
-  it("reports 'already belongs to a company' as a form message", () => {
+  it("sends a user who already has a company away (no form message)", () => {
     expect(
       mapActionError({
         code: "CONFLICT",
-        message: "This account already belongs to a company.",
+        message: "x",
+        reason: "ALREADY_HAS_COMPANY",
       }),
-    ).toEqual({
-      reason: "ALREADY_HAS_COMPANY",
-      formKey: "auth.errors.form.alreadyHasCompany",
-    });
+    ).toEqual({ reason: "ALREADY_HAS_COMPANY" });
   });
 
-  it("falls back to the generic message for a conflict it does not know", () => {
+  it("falls back to the generic message for a conflict without a reason", () => {
     expect(
       mapActionError({ code: "CONFLICT", message: "Something new." }),
+    ).toEqual({ reason: "UNKNOWN", formKey: "auth.errors.form.generic" });
+  });
+
+  it("ignores the English message: only the reason counts", () => {
+    expect(
+      mapActionError({
+        code: "CONFLICT",
+        message: "A buyer with this tax ID (PIB) is already registered.",
+      }),
     ).toEqual({ reason: "UNKNOWN", formKey: "auth.errors.form.generic" });
   });
 
@@ -79,21 +86,6 @@ describe("mapActionError", () => {
       formKey: "auth.errors.form.generic",
     });
     expect(mapActionError(undefined).reason).toBe("UNKNOWN");
-  });
-
-  // Option A matches the server's English texts. This fails as soon as one is reworded or removed,
-  // instead of the form silently showing the generic message.
-  it("matches texts that still exist in the server code", () => {
-    const sources = [
-      "src/server/domain/organizations.ts",
-      "src/server/auth/registration.ts",
-      "src/server/actions/registration.ts",
-    ]
-      .map((file) => readFileSync(file, "utf8"))
-      .join("\n");
-    for (const message of Object.keys(CONFLICT_MESSAGES)) {
-      expect(sources).toContain(`"${message}"`);
-    }
   });
 });
 
