@@ -42,6 +42,9 @@ pnpm test:rls            # RLS policies: real migrations on a throwaway database
 pnpm test:e2e            # Playwright
 pnpm search:reindex      # rebuild Meilisearch from Postgres
 SMOKE_BASE_URL=… SMOKE_BASIC_AUTH_USER=… SMOKE_BASIC_AUTH_PASS=… scripts/smoke-g0.sh   # G0 smoke test (CI runs it after each staging deploy)
+SMOKE_BASE_URL=https://horeca.bogdandelic.online scripts/smoke-production.sh   # read-only production smoke (CI, after each production deploy)
+scripts/next-version.sh <sha>   # next release tag from the Conventional Commits (CI release job)
+deploy/restore-test.sh <dump>   # restore a pg_dump into a throwaway Postgres and check it (server: /opt/horeca/bin, as deploy)
 ```
 Keep this section accurate — update it in the same PR that changes a command.
 
