@@ -81,6 +81,15 @@ export const PERMISSIONS = {
   "subOrder.deliver": supplierSide,
   "subOrder.cancel": everyone,
   "invoice.download": { buyer: "any", platform: "any" },
+  // Contracts (decision 012 §3, D5-B0): the buyer asks, the supplier confirms, the owner of either side ends.
+  "agreement.request": buyerSide,
+  "agreement.accept": supplierSide,
+  "agreement.reject": supplierSide,
+  "agreement.end": { buyer: "owner", supplier: "owner" },
+  "agreement.view": everyone,
+  // Card payment of the platform part (decision 012 §6; was stretch S6).
+  "payment.payByCard": buyerSide,
+  "payment.view": { buyer: "any", platform: "any" },
   "ledger.view": { supplier: "owner", platform: "any" },
   "ledger.recordPayout": platformOnly,
   "ledger.recordAdjustment": platformOnly,

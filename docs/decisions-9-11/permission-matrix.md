@@ -4,7 +4,7 @@ Two layers (CLAUDE.md rule 6):
 1. **Domain (first line):** every domain function loads the resource through a query scoped to the actor's
    organization, then calls `policy.can(actor, action, resource)`, then checks the status preconditions.
 2. **Postgres RLS (second line):** `schema/rls.sql` — tenant isolation holds even if a query forgets a filter.
-   Tested by `tests/rls_tests.sql` (78 checks) and `tests/rls_stretch_tests.sql` (8 checks).
+   Tested by `tests/rls_tests.sql` (207 checks, incl. section 9 of D5-B0) and `tests/rls_stretch_tests.sql` (S1 and S5).
 
 ## Responses (decision 9.3)
 | Situation | Domain error | Server Action / route handler |
@@ -56,7 +56,11 @@ Legend: ✅ allowed · `own` = own organization's data only · — denied (404, 
 | Cancel sub-order | own (while pending) | own (while pending) | own (before shipped) | own (before shipped) | ✅ before shipped (audited) |
 | Download pro-forma | own | own | ✏️ — | ✏️ — | ✅ |
 | ✏️ See whether the order is paid | own | own | own sub-orders | own sub-orders | ✅ |
-| ✏️ Record buyer payment / refund | — | — | — | — | ✅ (audited) |
+| ✏️ Record buyer payment / refund | — | — | — | — | ✏️ removed by 012 — the worker records card payments |
+| ✏️ Request a contract / see contracts | own | own | own | own | read |
+| ✏️ Accept / reject a contract request | — | — | own | own | — |
+| ✏️ End a contract | own | — | own | — | — |
+| ✏️ Pay by card (platform part) | own | own | — | — | read |
 | Ledger (view) | — | — | own | — | ✅ |
 | ✏️ Record payout / adjustment | — | — | — | — | ✅ (audited) |
 | Commission settings & per-supplier report | — | — | — | — | ✅ (audited) |
@@ -72,7 +76,6 @@ Legend: ✅ allowed · `own` = own organization's data only · — denied (404, 
 | S4 natural-language search | ✅ | ✅ | ✅ | ✅ | ✅ |
 | S5 create RFQ / invite / accept quote | own | own | — | — | read |
 | S5 see RFQ / submit quote | — | — | only if invited | only if invited | read |
-| S6 pay by card | own | own | — | — | read |
 | S7 invite / remove members | own | — | own | — | own |
 
 **Status rules (unchanged from the planning session):** a pending supplier builds its catalogue, invisible to buyers ·
@@ -132,6 +135,12 @@ foreign-key must equal `actor.orgId`. Every row becomes at least two tests: allo
 | `subOrder.cancel` | B\*, S\*, P | buyer: own order; supplier: own sub-order | B: `pending`; S and P: `pending` or `confirmed`; reason required | ✓ (P only) |
 | `invoice.download` | B\*, P | buyer_org_id; P all | PDF rendered | — |
 | `payment.recordReceipt` / `.recordRefund` | P | — | order exists | ✓ |
+| `agreement.request` | B\* | own (`buyer_org_id`) | supplier `approved`; no open (`requested` / `active`) agreement with it yet | — |
+| `agreement.accept` / `.reject` | S\* | `supplier_org_id` | `requested` | — |
+| `agreement.end` | Bo, So | `buyer_org_id` or `supplier_org_id` | `active` | — |
+| `agreement.view` | B\*, S\*, P | `buyer_org_id` or `supplier_org_id`; P all | — | — |
+| `payment.payByCard` | B\* | own order | order has a non-cancelled `platform` sub-order; no payment `pending` | — |
+| `payment.view` | B\*, P | `buyer_org_id`; P all | — | — |
 | `ledger.view` | So, P | supplier_org_id | — | — |
 | `ledger.recordPayout` / `.recordAdjustment` | P | — | — | ✓ |
 | `commission.report` | P | — | — | — |
@@ -150,7 +159,6 @@ foreign-key must equal `actor.orgId`. Every row becomes at least two tests: allo
 | `rfq.view` | B\*, S\* (invited), P | buyer_org_id or invitation | — | — |
 | `rfqQuote.submit` / `.withdraw` | S\* | invited | RFQ `open`/`quoted`; before deadline | — |
 | `rfqQuote.accept` | B\* | own RFQ | quote `submitted`, not expired → `createOrder(source = rfq)` | — |
-| `payment.payByCard` | B\* | own order | order `unpaid` | — |
 | `member.invite` / `member.remove` | Bo, So, Po | own org | — | ✓ |
 
 ## 3. Table coverage (every table → owner, RLS, actions)
@@ -171,14 +179,17 @@ foreign-key must equal `actor.orgId`. Every row becomes at least two tests: allo
 | `order_lines` | buyer + supplier | buyer / supplier / P · insert at checkout only | `checkout.placeOrder`, `subOrder.view` |
 | `sub_order_events` | buyer + supplier | buyer / supplier / P · insert must match current status | every `subOrder.*` transition |
 | `proforma_invoices` | buyer | buyer / P · v1 by buyer at checkout · worker renders and re-issues | `checkout.placeOrder`, `invoice.download`, `subOrder.cancel` (re-issue job) |
-| `order_payments` | buyer | buyer read · P insert · append-only | `payment.record*`, `order.view` |
+| `order_payments` | buyer | buyer read · worker insert receipts / refunds for a succeeded payment (D5-B0) · append-only | `order.view`, `payment.view`; the worker on gateway events (012: no `payment.record*`) |
 | `ledger_entries` | supplier | supplier **owner** read · P · insert checked against sub-order amounts · append-only | `checkout.placeOrder`, `subOrder.cancel`, `ledger.*`, `commission.report` |
 | `settings` | platform | read: logged-in · write: P | `settings.update`, `checkout.placeOrder` (commission default) |
 | `audit_log` | platform | insert: own actor · read: P · append-only | every audited action, `auditLog.view` |
 | `invoice_counters` | platform | no policy at all — only `app.next_invoice_number()` | `checkout.placeOrder` |
 | `price_tiers`, `buyer_prices` (S1) | supplier | with product · named buyer · supplier own | `priceTier.manage`, `buyerPrice.manage`, `price.viewBuyerSpecific` |
 | `rfq_requests`, `rfq_invitations`, `rfq_quotes` (S5) | buyer / supplier | buyer own · invited supplier · P | `rfq.*`, `rfqQuote.*` |
-| `payments`, `payment_events` (S6) | buyer / platform | buyer read · worker writes · P read | `payment.payByCard` |
+| `supplier_agreements` (D5-B0) | buyer + supplier | buyer / supplier own · P read · buyer inserts `requested` only · supplier decides, owner of either side ends (column grant + guard trigger) | `agreement.*`, `checkout.placeOrder` (direct mode: `sub_orders_insert` needs an `active` row) |
+| `payments` (D5-B0, was S6) | buyer | buyer own read + insert `created`, mark `pending` · worker updates status / provider_ref / refunded_cents · P read | `payment.payByCard`, `payment.view`; the worker on gateway events |
+| `payment_events` (D5-B0) | — | worker only (SELECT + INSERT, insert-only); the web login has no grant | none — written by the worker from signed gateway callbacks |
+| `product_stock` (D5-B0) | supplier | visible exactly when the product is visible · written by the worker only | `product.view`, `catalogue.search`, `cart.addItem` (stock badge) |
 
 ## 4. Rate limits (decision 9.7)
 | Action | Limit | Where |

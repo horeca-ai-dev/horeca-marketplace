@@ -193,6 +193,10 @@ afterAll(async () => {
     sql`delete from order_payments where order_id in ${orderIds}`,
   );
   await owner.execute(
+    sql`delete from payment_events where payment_id in (select id from payments where order_id in ${orderIds})`,
+  );
+  await owner.execute(sql`delete from payments where order_id in ${orderIds}`);
+  await owner.execute(
     sql`delete from proforma_invoices where order_id in ${orderIds}`,
   );
   await owner.execute(
@@ -346,30 +350,78 @@ describe("order lines, payments and pro-forma", () => {
     );
   });
 
+  // Since D5-B0 `order_payments.payment_id` is a real foreign key: a gateway row needs its `payments` row.
+  async function insertPayment(
+    orderId: string,
+    over: Partial<typeof schema.payments.$inferInsert> = {},
+  ) {
+    const [row] = await owner
+      .insert(schema.payments)
+      .values({
+        orderId,
+        buyerOrgId: buyerA,
+        idempotencyKey: unique("idem"),
+        amountCents: 1210,
+        ...over,
+      })
+      .returning({ id: schema.payments.id });
+    return row!.id;
+  }
+
   const payment = (
     orderId: string,
+    paymentId: string | null,
     over: Partial<typeof orderPayments.$inferInsert> = {},
   ) => ({
     orderId,
     buyerOrgId: buyerA,
     type: "receipt" as const,
     amountCents: 1210,
-    paymentId: crypto.randomUUID(),
+    paymentId,
     ...over,
   });
 
   it("accepts a gateway payment (worker style) and rejects the impossible ones", async () => {
     const orderId = await insertOrder();
-    await owner.insert(orderPayments).values(payment(orderId));
+    const paymentId = await insertPayment(orderId, { status: "succeeded" });
+    await owner.insert(orderPayments).values(payment(orderId, paymentId));
     await rejected("order_payments_positive", () =>
-      owner.insert(orderPayments).values(payment(orderId, { amountCents: 0 })),
+      owner
+        .insert(orderPayments)
+        .values(
+          payment(orderId, paymentId, { type: "refund", amountCents: 0 }),
+        ),
     );
     await rejected(
       "order_payments_recorded",
-      () =>
-        owner
-          .insert(orderPayments)
-          .values(payment(orderId, { paymentId: null })), // nobody recorded it
+      () => owner.insert(orderPayments).values(payment(orderId, null)), // nobody recorded it
+    );
+    await rejected("order_payments_payment_id_payments_id_fk", () =>
+      owner.insert(orderPayments).values(payment(orderId, crypto.randomUUID())),
+    );
+  });
+
+  it("allows a receipt and a refund for the same payment, but only one receipt (0006 replaced the UNIQUE)", async () => {
+    const orderId = await insertOrder();
+    const paymentId = await insertPayment(orderId, { status: "succeeded" });
+    await owner.insert(orderPayments).values(payment(orderId, paymentId));
+    await owner
+      .insert(orderPayments)
+      .values(payment(orderId, paymentId, { type: "refund" }));
+    await rejected("order_payments_one_receipt_per_payment_uq", () =>
+      owner.insert(orderPayments).values(payment(orderId, paymentId)),
+    );
+  });
+
+  it("keeps a payment consistent: at most one succeeded per order, refunds within the amount", async () => {
+    const orderId = await insertOrder();
+    await insertPayment(orderId, { status: "succeeded" });
+    await rejected("payments_one_succeeded_per_order_uq", () =>
+      insertPayment(orderId, { status: "succeeded" }),
+    );
+    await insertPayment(orderId, { status: "expired" }); // other attempts are fine
+    await rejected("payments_refunded", () =>
+      insertPayment(orderId, { status: "failed", refundedCents: 1 }),
     );
   });
 

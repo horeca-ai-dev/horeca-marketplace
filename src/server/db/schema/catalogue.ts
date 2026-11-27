@@ -327,3 +327,32 @@ export const productImages = pgTable(
     check("product_images_position", sql`${t.position} BETWEEN 0 AND 7`),
   ],
 );
+
+// ───────────────────────── supplier stock cache (decision 012 §7, D5-B0) ─────────────────────────
+
+export const stockStatus = pgEnum("stock_status", ["ok", "unknown"]);
+
+/**
+ * Last known stock of a product, copied from the supplier's API (mock) by the worker every 5 minutes. Stock
+ * comes only from there — never from CSV. `unknown` = the API did not answer; then the quantity is NULL and the
+ * UI shows "availability unknown". Read: whoever may see the product (same rule as `product_images`);
+ * written by `horeca_worker` only.
+ */
+export const productStock = pgTable(
+  "product_stock",
+  {
+    productId: uuid("product_id")
+      .primaryKey()
+      .references(() => products.id),
+    availableQty: integer("available_qty"),
+    status: stockStatus("status").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    check(
+      "product_stock_qty",
+      sql`(${t.status} = 'ok') = (${t.availableQty} IS NOT NULL)
+          AND (${t.availableQty} IS NULL OR ${t.availableQty} >= 0)`,
+    ),
+  ],
+);

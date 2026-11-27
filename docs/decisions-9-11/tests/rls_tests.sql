@@ -1,4 +1,4 @@
--- RLS integration tests for migration 0005 (run after ALL migrations, as the superuser).
+-- RLS integration tests for migrations 0005 (RLS) and 0006 (D5-B0: contracts, payments, stock, system cancel); run after ALL migrations, as the superuser.
 -- Edited for D4-B2 exactly as docs/decisions-9-11/APPLIED.md lists (decision 012, invoice sequence, no thumb_key,
 -- checkout locking); run by scripts/test-rls.sh against the real migrations — never by run_db_tests.sh.
 -- Every block switches to the app (or worker) role and sets the actor context exactly like withTx() does.
@@ -51,6 +51,9 @@ INSERT INTO org_profiles (organization_id, type, status, legal_name, tax_id, add
 -- (The pending and rejected suppliers exist as legacy rows: after decision 012 nothing creates them any more.)
 INSERT INTO supplier_profiles (organization_id, iban, commission_override_bps) VALUES
  ('o-sup-a', 'ME25510000000000000001', NULL), ('o-sup-b', 'ME25510000000000000002', 650), ('o-sup-p', NULL, NULL);
+-- D5-B0: a `direct` sub-order needs an active contract (sub_orders_insert), so the pairs the direct-mode checks below use have one.
+INSERT INTO supplier_agreements (buyer_org_id, supplier_org_id, status, requested_by_user_id, decided_by_user_id, decided_at) VALUES
+ ('o-hotel', 'o-sup-b', 'active', 'u-hotel', 'u-b-owner', now()), ('o-cafe', 'o-sup-b', 'active', 'u-cafe', 'u-b-owner', now());
 INSERT INTO buyer_locations (id, organization_id, label, address_line, city, postal_code, is_default) VALUES
  ('11111111-0000-0000-0000-000000000001', 'o-hotel', 'Hotel Main', 'Obala 1', 'Budva', '85310', true);
 INSERT INTO settings (key, value) VALUES ('default_commission_bps', '800'),
@@ -451,6 +454,281 @@ SELECT expect_fail('worker cannot change invoice amounts', $$UPDATE proforma_inv
 SELECT expect_fail('worker cannot insert a pro-forma version (no re-issue)',
   $$INSERT INTO proforma_invoices (order_id, buyer_org_id, version, number, issuer_snapshot, buyer_snapshot, content_snapshot, vat_breakdown, net_cents, vat_cents, gross_cents, due_date, payment_reference)
     VALUES ('55555555-0000-0000-0000-000000000001', 'o-hotel', 2, 'PF-X/2', '{}', '{}', '{}', '[]', 0, 0, 0, current_date, 'x')$$);
+ROLLBACK;
+
+-- ═════════════ 9. D5-B0: contracts, card payments, stock cache, system cancellation (migration 0006) ═════════════
+-- Fixtures (superuser). Supplier A was suspended in section 7: approve it again so that requests and visibility work.
+UPDATE org_profiles SET status = 'approved' WHERE organization_id = 'o-sup-a';
+-- Cafe's order: a platform sub-order with A (gross 12100, commission 800) and a direct one with B (gross 6050, commission 325).
+INSERT INTO orders (id, number, buyer_org_id, placed_by_user_id, idempotency_key, request_hash, buyer_snapshot, delivery_snapshot, net_cents, vat_cents, gross_cents)
+VALUES ('99999999-0000-0000-0000-000000000001', 'ORD-B0-1', 'o-cafe', 'u-cafe', 'idem-b0-1', 'h', '{}', '{}', 15000, 3150, 18150);
+INSERT INTO sub_orders (id, order_id, number, buyer_org_id, supplier_org_id, mode, buyer_snapshot, delivery_snapshot, net_cents, vat_cents, gross_cents, commission_bps, commission_cents) VALUES
+ ('99999999-0000-0000-0000-0000000000a1', '99999999-0000-0000-0000-000000000001', 'ORD-B0-1-1', 'o-cafe', 'o-sup-a', 'platform', '{}', '{}', 10000, 2100, 12100, 800, 800),
+ ('99999999-0000-0000-0000-0000000000b1', '99999999-0000-0000-0000-000000000001', 'ORD-B0-1-2', 'o-cafe', 'o-sup-b', 'direct',   '{}', '{}',  5000, 1050,  6050, 650, 325);
+INSERT INTO ledger_entries (supplier_org_id, sub_order_id, type, amount_cents, description) VALUES
+ ('o-sup-a', '99999999-0000-0000-0000-0000000000a1', 'sale', 12100, 'sale'),
+ ('o-sup-a', '99999999-0000-0000-0000-0000000000a1', 'commission', -800, 'commission'),
+ ('o-sup-b', '99999999-0000-0000-0000-0000000000b1', 'commission', -325, 'commission');
+
+-- ───── 9.1 Contracts (supplier_agreements) ─────
+BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-hotel', 'o-hotel', 'buyer', 'member');
+INSERT INTO supplier_agreements (id, buyer_org_id, supplier_org_id, requested_by_user_id, buyer_note)
+VALUES ('aaaaaaaa-0000-0000-0000-000000000001', 'o-hotel', 'o-sup-a', 'u-hotel', 'please');
+SELECT expect_eq('a buyer MEMBER requests a contract; it starts as requested',
+  (SELECT status::text FROM supplier_agreements WHERE id = 'aaaaaaaa-0000-0000-0000-000000000001'), 'requested');
+SELECT expect_fail('only one open request or contract per buyer and supplier',
+  $$INSERT INTO supplier_agreements (buyer_org_id, supplier_org_id, requested_by_user_id) VALUES ('o-hotel', 'o-sup-a', 'u-hotel')$$);
+SELECT expect_fail('a buyer cannot create an already active contract',
+  $$INSERT INTO supplier_agreements (buyer_org_id, supplier_org_id, status, requested_by_user_id, decided_by_user_id, decided_at)
+    VALUES ('o-hotel', 'o-sup-p', 'active', 'u-hotel', 'u-a-owner', now())$$);
+SELECT expect_fail('a buyer cannot request a contract in another buyer''s name',
+  $$INSERT INTO supplier_agreements (buyer_org_id, supplier_org_id, requested_by_user_id) VALUES ('o-cafe', 'o-sup-a', 'u-hotel')$$);
+SELECT expect_fail('a buyer cannot rewrite its note afterwards (column grant)',
+  $$UPDATE supplier_agreements SET buyer_note = 'changed'$$);
+SELECT expect_eq('a buyer MEMBER cannot decide or end (UPDATE touches 0 rows)',
+  rows_affected($q$UPDATE supplier_agreements SET status = 'active', decided_by_user_id = 'u-hotel', decided_at = now() WHERE id = 'aaaaaaaa-0000-0000-0000-000000000001'$q$), 0::bigint);
+SELECT actor('u-hotel', 'o-hotel', 'buyer', 'owner');
+SELECT expect_fail('a buyer owner cannot accept its own request (guard)',
+  $$UPDATE supplier_agreements SET status = 'active', decided_by_user_id = 'u-hotel', decided_at = now()$$);
+SELECT actor('u-cafe', 'o-cafe', 'buyer', 'owner');
+SELECT expect_eq('another buyer does not see the request', (SELECT count(*) FROM supplier_agreements WHERE supplier_org_id = 'o-sup-a'), 0::bigint);
+SELECT actor('u-b-owner', 'o-sup-b', 'supplier', 'owner');
+SELECT expect_eq('another supplier does not see the request', (SELECT count(*) FROM supplier_agreements WHERE supplier_org_id = 'o-sup-a'), 0::bigint);
+SELECT actor('u-admin', 'o-platform', 'platform', 'owner');
+SELECT expect_eq('the platform reads every contract', (SELECT count(*) FROM supplier_agreements), 3::bigint);
+SELECT expect_eq('the platform cannot change a contract (0 rows)',
+  rows_affected($q$UPDATE supplier_agreements SET status = 'active', decided_by_user_id = 'u-admin', decided_at = now()$q$), 0::bigint);
+SELECT actor('u-a-member', 'o-sup-a', 'supplier', 'member');
+SELECT expect_eq('the supplier sees the request', (SELECT count(*) FROM supplier_agreements), 1::bigint);
+SELECT expect_fail('the decider must be the acting user',
+  $$UPDATE supplier_agreements SET status = 'active', decided_by_user_id = 'u-a-owner', decided_at = now()$$);
+SELECT expect_eq('a supplier MEMBER accepts the request',
+  rows_affected($q$UPDATE supplier_agreements SET status = 'active', decided_by_user_id = 'u-a-member', decided_at = now(), payment_term_days = 30, supplier_note = 'welcome'$q$), 1::bigint);
+SELECT expect_fail('an active contract cannot go back to requested', $$UPDATE supplier_agreements SET status = 'requested'$$);
+SELECT expect_fail('a supplier MEMBER cannot end a contract (owner only)',
+  $$UPDATE supplier_agreements SET status = 'ended', ended_at = now()$$);
+SELECT actor('u-a-owner', 'o-sup-a', 'supplier', 'owner');
+SELECT expect_eq('the supplier OWNER ends the contract',
+  rows_affected($q$UPDATE supplier_agreements SET status = 'ended', ended_at = now()$q$), 1::bigint);
+SELECT expect_fail('an ended contract cannot be revived', $$UPDATE supplier_agreements SET status = 'active', ended_at = NULL$$);
+SELECT actor('u-hotel', 'o-hotel', 'buyer', 'member');
+INSERT INTO supplier_agreements (buyer_org_id, supplier_org_id, requested_by_user_id) VALUES ('o-hotel', 'o-sup-a', 'u-hotel');
+SELECT expect_eq('after the contract ended the buyer may request a new one',
+  (SELECT count(*) FROM supplier_agreements WHERE supplier_org_id = 'o-sup-a' AND status = 'requested'), 1::bigint);
+ROLLBACK;
+
+BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-cafe', 'o-cafe', 'buyer', 'member');
+SELECT expect_fail('no contract request with a supplier the buyer cannot see (pending supplier)',
+  $$INSERT INTO supplier_agreements (buyer_org_id, supplier_org_id, requested_by_user_id) VALUES ('o-cafe', 'o-sup-p', 'u-cafe')$$);
+SELECT expect_fail('no contract request with a buyer',
+  $$INSERT INTO supplier_agreements (buyer_org_id, supplier_org_id, requested_by_user_id) VALUES ('o-cafe', 'o-hotel', 'u-cafe')$$);
+SELECT expect_fail('the requesting user must be the acting user',
+  $$INSERT INTO supplier_agreements (buyer_org_id, supplier_org_id, requested_by_user_id) VALUES ('o-cafe', 'o-sup-a', 'u-hotel')$$);
+INSERT INTO supplier_agreements (id, buyer_org_id, supplier_org_id, requested_by_user_id) VALUES ('aaaaaaaa-0000-0000-0000-000000000002', 'o-cafe', 'o-sup-a', 'u-cafe');
+SELECT actor('u-a-owner', 'o-sup-a', 'supplier', 'owner');
+SELECT expect_eq('the supplier rejects the request',
+  rows_affected($q$UPDATE supplier_agreements SET status = 'rejected', decided_by_user_id = 'u-a-owner', decided_at = now(), supplier_note = 'not now'$q$), 1::bigint);
+SELECT expect_fail('a rejected request cannot be accepted later', $$UPDATE supplier_agreements SET status = 'active', decided_by_user_id = 'u-a-owner'$$);
+ROLLBACK;
+
+-- Second layer for direct mode: a `direct` sub-order needs an active contract between exactly this pair.
+BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-cafe', 'o-cafe', 'buyer', 'owner');
+INSERT INTO supplier_agreements (buyer_org_id, supplier_org_id, requested_by_user_id) VALUES ('o-cafe', 'o-sup-a', 'u-cafe');
+INSERT INTO orders (id, number, buyer_org_id, placed_by_user_id, idempotency_key, request_hash, buyer_snapshot, delivery_snapshot, net_cents, vat_cents, gross_cents)
+VALUES ('99999999-0000-0000-0000-000000000002', 'ORD-B0-2', 'o-cafe', 'u-cafe', 'idem-b0-2', 'h', '{}', '{}', 2000, 420, 2420);
+SELECT expect_fail('a direct sub-order needs an ACTIVE contract (a request is not enough)',
+  $$INSERT INTO sub_orders (order_id, number, buyer_org_id, supplier_org_id, mode, buyer_snapshot, delivery_snapshot, net_cents, vat_cents, gross_cents, commission_bps, commission_cents)
+    VALUES ('99999999-0000-0000-0000-000000000002', 'ORD-B0-2-1', 'o-cafe', 'o-sup-a', 'direct', '{}', '{}', 1000, 210, 1210, 800, 80)$$);
+INSERT INTO sub_orders (order_id, number, buyer_org_id, supplier_org_id, mode, buyer_snapshot, delivery_snapshot, net_cents, vat_cents, gross_cents, commission_bps, commission_cents)
+VALUES ('99999999-0000-0000-0000-000000000002', 'ORD-B0-2-2', 'o-cafe', 'o-sup-b', 'platform', '{}', '{}', 1000, 210, 1210, 650, 65);
+SELECT expect_eq('a platform sub-order needs no contract', (SELECT count(*) FROM sub_orders WHERE order_id = '99999999-0000-0000-0000-000000000002'), 1::bigint);
+SELECT actor('u-a-owner', 'o-sup-a', 'supplier', 'owner');
+UPDATE supplier_agreements SET status = 'active', decided_by_user_id = 'u-a-owner', decided_at = now() WHERE buyer_org_id = 'o-cafe' AND supplier_org_id = 'o-sup-a';
+SELECT actor('u-cafe', 'o-cafe', 'buyer', 'owner');
+INSERT INTO sub_orders (order_id, number, buyer_org_id, supplier_org_id, mode, buyer_snapshot, delivery_snapshot, net_cents, vat_cents, gross_cents, commission_bps, commission_cents)
+VALUES ('99999999-0000-0000-0000-000000000002', 'ORD-B0-2-1', 'o-cafe', 'o-sup-a', 'direct', '{}', '{}', 1000, 210, 1210, 800, 80);
+SELECT expect_eq('once the supplier accepted, the same direct sub-order is allowed', (SELECT count(*) FROM sub_orders WHERE order_id = '99999999-0000-0000-0000-000000000002'), 2::bigint);
+SELECT expect_fail('no contract with this supplier → still no direct sub-order',
+  $$INSERT INTO sub_orders (order_id, number, buyer_org_id, supplier_org_id, mode, buyer_snapshot, delivery_snapshot, net_cents, vat_cents, gross_cents, commission_bps, commission_cents)
+    VALUES ('99999999-0000-0000-0000-000000000002', 'ORD-B0-2-3', 'o-cafe', 'o-sup-p', 'direct', '{}', '{}', 1000, 210, 1210, 800, 80)$$);
+ROLLBACK;
+
+-- ───── 9.2 Card payments ─────
+BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-cafe', 'o-cafe', 'buyer', 'member');
+INSERT INTO payments (id, order_id, buyer_org_id, idempotency_key, amount_cents)
+VALUES ('99999999-0000-0000-0000-0000000000c1', '99999999-0000-0000-0000-000000000001', 'o-cafe', 'b0-pay-1', 12100);
+SELECT expect_fail('a buyer cannot insert an already succeeded payment',
+  $$INSERT INTO payments (order_id, buyer_org_id, idempotency_key, amount_cents, status) VALUES ('99999999-0000-0000-0000-000000000001', 'o-cafe', 'b0-x1', 12100, 'succeeded')$$);
+SELECT expect_fail('a buyer cannot insert a payment with a refund booked',
+  $$INSERT INTO payments (order_id, buyer_org_id, idempotency_key, amount_cents, refunded_cents) VALUES ('99999999-0000-0000-0000-000000000001', 'o-cafe', 'b0-x2', 12100, 5)$$);
+SELECT expect_fail('a buyer cannot pay for another buyer''s order',
+  $$INSERT INTO payments (order_id, buyer_org_id, idempotency_key, amount_cents) VALUES ('55555555-0000-0000-0000-000000000001', 'o-cafe', 'b0-x3', 100)$$);
+SELECT expect_fail('a buyer cannot create a payment in another buyer''s name',
+  $$INSERT INTO payments (order_id, buyer_org_id, idempotency_key, amount_cents) VALUES ('99999999-0000-0000-0000-000000000001', 'o-hotel', 'b0-x4', 12100)$$);
+SELECT expect_fail('a payment must be positive',
+  $$INSERT INTO payments (order_id, buyer_org_id, idempotency_key, amount_cents) VALUES ('99999999-0000-0000-0000-000000000001', 'o-cafe', 'b0-x5', 0)$$);
+SELECT expect_fail('the idempotency key is unique',
+  $$INSERT INTO payments (order_id, buyer_org_id, idempotency_key, amount_cents) VALUES ('99999999-0000-0000-0000-000000000001', 'o-cafe', 'b0-pay-1', 12100)$$);
+INSERT INTO payments (id, order_id, buyer_org_id, idempotency_key, amount_cents)
+VALUES ('99999999-0000-0000-0000-0000000000c2', '99999999-0000-0000-0000-000000000001', 'o-cafe', 'b0-pay-2', 12100);
+SELECT expect_fail('the buyer cannot mark a payment succeeded itself (only created → pending)',
+  $$UPDATE payments SET status = 'succeeded' WHERE id = '99999999-0000-0000-0000-0000000000c2'$$);
+SELECT expect_fail('the buyer cannot change the amount (column grant)', $$UPDATE payments SET amount_cents = 1$$);
+SELECT expect_fail('the buyer cannot book a refund (column grant)', $$UPDATE payments SET refunded_cents = 1$$);
+SELECT expect_fail('marking pending needs the provider reference',
+  $$UPDATE payments SET status = 'pending' WHERE id = '99999999-0000-0000-0000-0000000000c2'$$);
+SELECT expect_eq('after the gateway answered the buyer marks its attempt pending',
+  rows_affected($q$UPDATE payments SET status = 'pending', provider_ref = 'mock-1', updated_at = now() WHERE id = '99999999-0000-0000-0000-0000000000c1'$q$), 1::bigint);
+SELECT expect_eq('a pending payment is no longer the buyer''s to change (0 rows)',
+  rows_affected($q$UPDATE payments SET status = 'pending', provider_ref = 'mock-9' WHERE id = '99999999-0000-0000-0000-0000000000c1'$q$), 0::bigint);
+SELECT expect_eq('the buyer sees its payments', (SELECT count(*) FROM payments), 2::bigint);
+SELECT expect_fail('the web login has no access to payment events', $$SELECT count(*) FROM payment_events$$);
+COMMIT;
+
+BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-hotel', 'o-hotel', 'buyer', 'owner');
+SELECT expect_eq('another buyer sees no payment', (SELECT count(*) FROM payments), 0::bigint);
+ROLLBACK;
+BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-a-owner', 'o-sup-a', 'supplier', 'owner');
+SELECT expect_eq('a supplier sees no payment', (SELECT count(*) FROM payments), 0::bigint);
+ROLLBACK;
+BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-admin', 'o-platform', 'platform', 'owner');
+SELECT expect_eq('the platform reads every payment', (SELECT count(*) FROM payments), 2::bigint);
+SELECT expect_eq('the platform cannot change a payment (0 rows)', rows_affected($q$UPDATE payments SET status = 'failed'$q$), 0::bigint);
+ROLLBACK;
+
+-- The worker processes the gateway events (system context).
+BEGIN; SET LOCAL ROLE horeca_worker;
+SELECT expect_eq('worker: payment succeeded',
+  rows_affected($q$UPDATE payments SET status = 'succeeded', updated_at = now() WHERE id = '99999999-0000-0000-0000-0000000000c1'$q$), 1::bigint);
+SELECT expect_fail('at most one succeeded payment per order',
+  $$UPDATE payments SET status = 'succeeded' WHERE id = '99999999-0000-0000-0000-0000000000c2'$$);
+INSERT INTO payment_events (payment_id, provider_event_id, type, signature_valid, amount_cents, raw)
+VALUES ('99999999-0000-0000-0000-0000000000c1', 'evt-b0-1', 'payment.succeeded', true, 12100, '{}');
+SELECT expect_fail('a duplicate callback (same provider_event_id) is rejected',
+  $$INSERT INTO payment_events (payment_id, provider_event_id, type, signature_valid, raw) VALUES ('99999999-0000-0000-0000-0000000000c1', 'evt-b0-1', 'payment.succeeded', true, '{}')$$);
+SELECT expect_fail('payment events are insert-only: UPDATE', $$UPDATE payment_events SET type = 'x'$$);
+SELECT expect_fail('payment events are insert-only: DELETE', $$DELETE FROM payment_events$$);
+SELECT expect_fail('worker: a receipt must carry exactly the payment''s amount',
+  $$INSERT INTO order_payments (order_id, buyer_org_id, type, amount_cents, payment_id) VALUES ('99999999-0000-0000-0000-000000000001', 'o-cafe', 'receipt', 12000, '99999999-0000-0000-0000-0000000000c1')$$);
+SELECT expect_fail('worker: the receipt must belong to the payment''s order',
+  $$INSERT INTO order_payments (order_id, buyer_org_id, type, amount_cents, payment_id) VALUES ('55555555-0000-0000-0000-000000000001', 'o-hotel', 'receipt', 12100, '99999999-0000-0000-0000-0000000000c1')$$);
+SELECT expect_fail('worker: no receipt for a payment that is not succeeded',
+  $$INSERT INTO order_payments (order_id, buyer_org_id, type, amount_cents, payment_id) VALUES ('99999999-0000-0000-0000-000000000001', 'o-cafe', 'receipt', 12100, '99999999-0000-0000-0000-0000000000c2')$$);
+SELECT expect_fail('worker: a receipt cannot name a recording user',
+  $$INSERT INTO order_payments (order_id, buyer_org_id, type, amount_cents, payment_id, recorded_by_user_id) VALUES ('99999999-0000-0000-0000-000000000001', 'o-cafe', 'receipt', 12100, '99999999-0000-0000-0000-0000000000c1', 'u-admin')$$);
+INSERT INTO order_payments (order_id, buyer_org_id, type, amount_cents, payment_id)
+VALUES ('99999999-0000-0000-0000-000000000001', 'o-cafe', 'receipt', 12100, '99999999-0000-0000-0000-0000000000c1');
+SELECT expect_fail('one receipt per payment',
+  $$INSERT INTO order_payments (order_id, buyer_org_id, type, amount_cents, payment_id) VALUES ('99999999-0000-0000-0000-000000000001', 'o-cafe', 'receipt', 12100, '99999999-0000-0000-0000-0000000000c1')$$);
+SELECT app.recompute_order('99999999-0000-0000-0000-000000000001');
+SELECT expect_eq('the receipt pays the platform part (the direct part is not due to the platform)',
+  (SELECT payment_status::text FROM orders WHERE id = '99999999-0000-0000-0000-000000000001'), 'paid');
+INSERT INTO order_payments (order_id, buyer_org_id, type, amount_cents, payment_id)
+VALUES ('99999999-0000-0000-0000-000000000001', 'o-cafe', 'refund', 12100, '99999999-0000-0000-0000-0000000000c1');
+SELECT expect_eq('the SAME payment can have a refund next to its receipt (UNIQUE on payment_id was dropped)',
+  (SELECT count(*) FROM order_payments WHERE payment_id = '99999999-0000-0000-0000-0000000000c1'), 2::bigint);
+SELECT expect_fail('worker: a refund cannot exceed the payment',
+  $$INSERT INTO order_payments (order_id, buyer_org_id, type, amount_cents, payment_id) VALUES ('99999999-0000-0000-0000-000000000001', 'o-cafe', 'refund', 12101, '99999999-0000-0000-0000-0000000000c1')$$);
+SELECT expect_fail('worker: a refund without a payment is denied',
+  $$INSERT INTO order_payments (order_id, buyer_org_id, type, amount_cents) VALUES ('99999999-0000-0000-0000-000000000001', 'o-cafe', 'refund', 100)$$);
+SELECT expect_eq('worker: refunded_cents follows the refund',
+  rows_affected($q$UPDATE payments SET refunded_cents = 12100 WHERE id = '99999999-0000-0000-0000-0000000000c1'$q$), 1::bigint);
+SELECT expect_fail('refunded_cents cannot exceed the amount', $$UPDATE payments SET refunded_cents = 12101 WHERE id = '99999999-0000-0000-0000-0000000000c1'$$);
+SELECT expect_fail('refunded_cents only on a succeeded payment', $$UPDATE payments SET refunded_cents = 5 WHERE id = '99999999-0000-0000-0000-0000000000c2'$$);
+SELECT app.recompute_order('99999999-0000-0000-0000-000000000001');
+SELECT expect_eq('receipt − refund = 0 → unpaid again', (SELECT payment_status::text FROM orders WHERE id = '99999999-0000-0000-0000-000000000001'), 'unpaid');
+-- Aimed at the still-`created` attempt (nothing refunded), so a successful change would be a valid row: only the column grant stops it.
+SELECT expect_fail('worker cannot change the amount of a payment (column grant)',
+  $$UPDATE payments SET amount_cents = 1 WHERE id = '99999999-0000-0000-0000-0000000000c2'$$);
+SELECT expect_fail('worker cannot create payments', $$INSERT INTO payments (order_id, buyer_org_id, idempotency_key, amount_cents) VALUES ('99999999-0000-0000-0000-000000000001', 'o-cafe', 'b0-w', 1)$$);
+ROLLBACK;
+
+-- ───── 9.3 Stock cache (product_stock) ─────
+INSERT INTO product_stock (product_id, available_qty, status, fetched_at) VALUES
+ ('33333333-0000-0000-0000-00000000000a', 12, 'ok', now()),
+ ('33333333-0000-0000-0000-0000000000ad', 3, 'ok', now()),
+ ('33333333-0000-0000-0000-00000000000b', NULL, 'unknown', now()),
+ ('33333333-0000-0000-0000-00000000000f', 7, 'ok', now());
+SELECT expect_fail('stock: "unknown" has no quantity',
+  $$INSERT INTO product_stock (product_id, available_qty, status, fetched_at) SELECT id, 1, 'unknown', now() FROM products WHERE sku = 'RF-150' ON CONFLICT (product_id) DO UPDATE SET available_qty = 1, status = 'unknown'$$);
+SELECT expect_fail('stock: "ok" needs a quantity', $$UPDATE product_stock SET available_qty = NULL WHERE status = 'ok'$$);
+SELECT expect_fail('stock: the quantity cannot be negative', $$UPDATE product_stock SET available_qty = -1 WHERE status = 'ok'$$);
+BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-hotel', 'o-hotel', 'buyer', 'owner');
+SELECT expect_eq('a buyer sees the stock of visible products only (A active, B active — not the draft, not the pending supplier)',
+  (SELECT count(*) FROM product_stock), 2::bigint);
+SELECT expect_fail('the web login cannot write stock', $$UPDATE product_stock SET available_qty = 999$$);
+SELECT expect_fail('the web login cannot insert stock', $$INSERT INTO product_stock (product_id, available_qty, status, fetched_at) VALUES ('33333333-0000-0000-0000-00000000000a', 1, 'ok', now())$$);
+ROLLBACK;
+BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-a-owner', 'o-sup-a', 'supplier', 'owner');
+SELECT expect_eq('a supplier sees its own draft''s stock too (own A: 2 + B active: 1)', (SELECT count(*) FROM product_stock), 3::bigint);
+ROLLBACK;
+BEGIN; SET LOCAL ROLE horeca_worker;
+SELECT expect_eq('worker reads all stock', (SELECT count(*) FROM product_stock), 4::bigint);
+INSERT INTO product_stock (product_id, available_qty, status, fetched_at) VALUES ('33333333-0000-0000-0000-00000000000b', 5, 'ok', now())
+  ON CONFLICT (product_id) DO UPDATE SET available_qty = EXCLUDED.available_qty, status = EXCLUDED.status, fetched_at = EXCLUDED.fetched_at;
+SELECT expect_eq('worker upserts the stock', (SELECT available_qty FROM product_stock WHERE product_id = '33333333-0000-0000-0000-00000000000b'), 5);
+SELECT expect_fail('worker cannot delete stock rows', $$DELETE FROM product_stock$$);
+ROLLBACK;
+
+-- ───── 9.4 app.system_cancel_sub_order ─────
+-- The function also checks its caller, but the EXECUTE grant is the first lock: test it on its own.
+SELECT expect_eq('EXECUTE on system_cancel_sub_order: the worker yes; the web login and PUBLIC no',
+  has_function_privilege('horeca_worker', 'app.system_cancel_sub_order(uuid, text)', 'EXECUTE')
+  AND NOT has_function_privilege('horeca_app', 'app.system_cancel_sub_order(uuid, text)', 'EXECUTE')
+  AND NOT EXISTS (SELECT 1 FROM pg_proc p, aclexplode(p.proacl) a
+                  WHERE p.proname = 'system_cancel_sub_order' AND a.grantee = 0), true);
+BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-cafe', 'o-cafe', 'buyer', 'owner');
+SELECT expect_fail('the web login (buyer) cannot call the system cancellation',
+  $$SELECT app.system_cancel_sub_order('99999999-0000-0000-0000-0000000000a1', 'payment expired')$$);
+SELECT actor('u-admin', 'o-platform', 'platform', 'owner');
+SELECT expect_fail('the web login (platform) cannot call it either',
+  $$SELECT app.system_cancel_sub_order('99999999-0000-0000-0000-0000000000a1', 'payment expired')$$);
+ROLLBACK;
+
+BEGIN; SET LOCAL ROLE horeca_worker;
+SELECT expect_eq('platform sub-order before: owed gross − commission', (SELECT sum(amount_cents) FROM ledger_entries WHERE sub_order_id = '99999999-0000-0000-0000-0000000000a1'), 11300::numeric);
+SELECT app.system_cancel_sub_order('99999999-0000-0000-0000-0000000000a1', 'payment expired');
+SELECT expect_eq('platform: cancelled with the reason and no user',
+  (SELECT status::text || '|' || cancel_reason || '|' || coalesce(cancelled_by_user_id, 'system') FROM sub_orders WHERE id = '99999999-0000-0000-0000-0000000000a1'), 'cancelled|payment expired|system');
+SELECT expect_eq('platform: reversals book sale_reversal and commission_reversal, entries sum to 0',
+  (SELECT string_agg(type::text, ',' ORDER BY type::text) || '|' || sum(amount_cents) FROM ledger_entries WHERE sub_order_id = '99999999-0000-0000-0000-0000000000a1'),
+  'commission,commission_reversal,sale,sale_reversal|0');
+SELECT expect_eq('the history has the system''s event',
+  (SELECT count(*) FROM sub_order_events WHERE sub_order_id = '99999999-0000-0000-0000-0000000000a1' AND to_status = 'cancelled' AND actor_user_id IS NULL AND note = 'payment expired'), 1::bigint);
+SELECT expect_eq('the order is recomputed: nothing left to pay → not_applicable, still in progress (the direct part is open)',
+  (SELECT payment_status::text || '|' || status::text FROM orders WHERE id = '99999999-0000-0000-0000-000000000001'), 'not_applicable|in_progress');
+SELECT app.system_cancel_sub_order('99999999-0000-0000-0000-0000000000a1', 'payment expired');
+SELECT expect_eq('running it twice changes nothing (idempotent job): still 4 ledger rows, 1 event',
+  (SELECT (SELECT count(*) FROM ledger_entries WHERE sub_order_id = '99999999-0000-0000-0000-0000000000a1') * 10
+        + (SELECT count(*) FROM sub_order_events WHERE sub_order_id = '99999999-0000-0000-0000-0000000000a1')), 41::bigint);
+SELECT app.system_cancel_sub_order('99999999-0000-0000-0000-0000000000b1', 'supplier API rejected');
+SELECT expect_eq('direct: only commission_reversal, no sale_reversal; entries sum to 0',
+  (SELECT string_agg(type::text, ',' ORDER BY type::text) || '|' || sum(amount_cents) FROM ledger_entries WHERE sub_order_id = '99999999-0000-0000-0000-0000000000b1'),
+  'commission,commission_reversal|0');
+SELECT expect_eq('all sub-orders cancelled → the order is cancelled',
+  (SELECT status::text FROM orders WHERE id = '99999999-0000-0000-0000-000000000001'), 'cancelled');
+SELECT expect_fail('a cancel reason is required', $$SELECT app.system_cancel_sub_order('99999999-0000-0000-0000-0000000000a1', '  ')$$);
+SELECT expect_fail('an unknown sub-order is refused', $$SELECT app.system_cancel_sub_order('99999999-0000-0000-0000-0000000000ff', 'x')$$);
+ROLLBACK;
+
+-- A paid platform sub-order cancelled by the system leaves a refund due (the job then asks the gateway for the refund).
+BEGIN;
+UPDATE payments SET status = 'succeeded' WHERE id = '99999999-0000-0000-0000-0000000000c1';
+INSERT INTO order_payments (order_id, buyer_org_id, type, amount_cents, payment_id)
+VALUES ('99999999-0000-0000-0000-000000000001', 'o-cafe', 'receipt', 12100, '99999999-0000-0000-0000-0000000000c1');
+SET LOCAL ROLE horeca_worker;
+SELECT app.recompute_order('99999999-0000-0000-0000-000000000001');
+SELECT expect_eq('paid before the cancellation', (SELECT payment_status::text FROM orders WHERE id = '99999999-0000-0000-0000-000000000001'), 'paid');
+SELECT app.system_cancel_sub_order('99999999-0000-0000-0000-0000000000a1', 'supplier API rejected');
+SELECT expect_eq('cancelled after payment → refund_due', (SELECT payment_status::text FROM orders WHERE id = '99999999-0000-0000-0000-000000000001'), 'refund_due');
+ROLLBACK;
+
+-- Shipped sub-orders can no longer be cancelled, not even by the system.
+BEGIN;
+UPDATE sub_orders SET status = 'shipped' WHERE id = '99999999-0000-0000-0000-0000000000b1';
+SET LOCAL ROLE horeca_worker;
+SELECT expect_fail('a shipped sub-order is refused',
+  $$SELECT app.system_cancel_sub_order('99999999-0000-0000-0000-0000000000b1', 'supplier API rejected')$$);
 ROLLBACK;
 
 SELECT 'ALL RLS TESTS PASSED' AS result;
