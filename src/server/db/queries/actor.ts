@@ -7,6 +7,9 @@
  *
  * Returns null when the user is not a member, the role is not one we know, or the organization has no
  * profile yet (registration not finished) → the caller treats the user as "no organization".
+ *
+ * Also returns the company's legal name from the same row, for the header (D5-A2) — it is display
+ * data, so it stays outside the Actor that domain functions receive.
  */
 import { and, eq } from "drizzle-orm";
 import { isMemberRole, isOrgType, type Actor } from "@/server/domain/actor";
@@ -16,7 +19,7 @@ import { setRlsContext, withUserTx } from "@/server/db/tx";
 export async function loadActor(
   userId: string,
   organizationId: string,
-): Promise<Actor | null> {
+): Promise<{ actor: Actor; orgName: string } | null> {
   return withUserTx(userId, async (tx) => {
     // 1. Membership. `member` is a Better Auth table: no RLS, protected by this explicit filter.
     const [membership] = await tx
@@ -39,17 +42,20 @@ export async function loadActor(
       role: membership.role,
     });
     const [profile] = await tx
-      .select({ type: orgProfiles.type })
+      .select({ type: orgProfiles.type, legalName: orgProfiles.legalName })
       .from(orgProfiles)
       .where(eq(orgProfiles.organizationId, organizationId))
       .limit(1);
     if (!profile || !isOrgType(profile.type)) return null;
 
     return {
-      userId,
-      orgId: organizationId,
-      orgType: profile.type,
-      role: membership.role,
+      actor: {
+        userId,
+        orgId: organizationId,
+        orgType: profile.type,
+        role: membership.role,
+      },
+      orgName: profile.legalName,
     };
   });
 }

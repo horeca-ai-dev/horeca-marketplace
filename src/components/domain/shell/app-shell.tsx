@@ -7,8 +7,9 @@
  *
  * Below `md` (buyer) / `lg` (supplier, admin) the navigation moves into a sheet opened from the header.
  *
- * A Server Component that reads nothing: no session, no database. Who may enter an area is decided
- * by the route guards (D5-A2) and, for every action, by the domain layer.
+ * A Server Component that reads nothing: no session, no database — the area layout passes the company
+ * name. Who may enter an area is decided by the layout's route guard (requireArea, D5-A2) and, for
+ * every action, by the domain layer.
  */
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -22,9 +23,12 @@ import { UserMenu } from "./user-menu";
 
 export async function AppShell({
   area,
+  orgName,
   children,
 }: {
   area: Area;
+  /** The active organization's legal name (from resolveSession). */
+  orgName: string;
   children: ReactNode;
 }) {
   const t = await getTranslations();
@@ -62,7 +66,7 @@ export async function AppShell({
             </nav>
           )}
           <div className="ml-auto flex min-w-0 items-center gap-3">
-            <OrgSlot area={area} />
+            <OrgSlot area={area} orgName={orgName} />
             <UserMenu area={area} />
           </div>
         </div>

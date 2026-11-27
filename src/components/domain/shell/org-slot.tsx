@@ -1,28 +1,25 @@
 /**
- * "Who you are acting as" in the header (DESIGN.md principle 7).
+ * "Who you are acting as" in the header (DESIGN.md principle 7): OrgBadge with the organization type
+ * of the area and the company name — "Kupac · Hotel Primorje". The platform shows its type only.
  *
- * D4-A1 shows only the organization TYPE of the area. The company name and the organization switcher
- * come with OrgBadge / OrgSwitcher (D4-A2, D5-A2) and replace this component in the same place —
- * the name needs a database read, which the shell does not do.
+ * The name comes from the area layout (requireArea → resolveSession), so the shell itself reads
+ * nothing. The organization switcher is not here: in the MVP a user belongs to one organization;
+ * it arrives with S7 member invitations (TASKS.md).
  */
-import { Building2, ShieldCheck, Truck } from "lucide-react";
-import { getTranslations } from "next-intl/server";
-import { Icon } from "@/components/ui/icon";
-import { type Area, AREAS } from "./nav";
+import { OrgBadge, type OrgType } from "@/components/domain/org-badge";
+import type { Area } from "./nav";
 
-const ICONS = {
-  buyer: Building2,
-  supplier: Truck,
-  admin: ShieldCheck,
-} as const;
+const ORG_TYPE = {
+  buyer: "buyer",
+  supplier: "supplier",
+  admin: "platform",
+} as const satisfies Record<Area, OrgType>;
 
-export async function OrgSlot({ area }: { area: Area }) {
-  const t = await getTranslations();
+export function OrgSlot({ area, orgName }: { area: Area; orgName: string }) {
   return (
-    <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
-      <Icon icon={ICONS[area]} className="text-muted-foreground" />
-      <span className="truncate">{t(AREAS[area].orgTypeKey)}</span>
-      {/* SLOT (D4-A2 / D5-A2): " · {company name}" and the organization switcher go here. */}
-    </p>
+    <OrgBadge
+      type={ORG_TYPE[area]}
+      name={area === "admin" ? undefined : orgName}
+    />
   );
 }
