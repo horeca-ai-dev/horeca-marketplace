@@ -11,3 +11,11 @@ allowBuilds:
   # @parcel/watcher-<platform>); the scripts only check for / compile a fallback.
   "@parcel/watcher": false
   "@swc/core": false
+
+# @tanstack/react-table 9.3.1 asks for @tanstack/react-store ^0.11.2; on 27.11.2026 that range
+# resolved to 0.11.4 (+ @tanstack/store 0.11.3), published 22.11.2026 — younger than our 14-day
+# minimum. Pinned to 0.11.2 (29.09.2026), the version table-core 9.3.1 was released against.
+# Drop the pins once a newer pair is old enough and the update is checked.
+overrides:
+  "@tanstack/react-store": 0.11.2
+  "@tanstack/store": 0.11.2
