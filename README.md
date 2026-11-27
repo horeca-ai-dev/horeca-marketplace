@@ -121,7 +121,7 @@ pnpm db:seed
 pnpm dev                       # http://localhost:3000
 pnpm worker:dev                # second terminal
 ```
-Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the Garage bucket `horeca-media` (S3 API at `http://127.0.0.1:3900`). *(Until the storage module moves to S3 on D5-B3, the app still reads `MEDIA_DIR`.)*
+Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the Garage bucket `horeca-media` (S3 API at `http://127.0.0.1:3900`). **The web app and the worker refuse to start without the `S3_*` variables**: after `scripts/garage-setup.sh` paste the `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` pair it prints into your local `.env` (it is shown only once; `docker compose exec garage /garage key info --show-secret horeca-app` shows it again).*
 
 **Database logins:** on first start, `deploy/postgres/init/01-roles.sh` creates `horeca_owner` (owns the `horeca` database, runs migrations), `horeca_app` and `horeca_worker` from the `POSTGRES_*_PASSWORD` values in `.env`. The script runs **only on an empty data volume**. If you change those passwords, or want a clean database, reset the volumes with `docker compose -f docker-compose.dev.yml down -v`, which deletes all local data. All ports are bound to `127.0.0.1`.
 
@@ -145,10 +145,9 @@ Config: `deploy/garage/garage.toml` (no secrets — Garage reads `GARAGE_RPC_SEC
 | `DATABASE_MIGRATE_URL` | Owner login `horeca_owner` — migrate container only |
 | `MEILI_HOST`, `MEILI_API_KEY` | Meilisearch (server-side only, never sent to the browser) |
 | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Better Auth |
-| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_FORCE_PATH_STYLE` | Media storage (product images, invoice PDFs) via the S3 API — Garage locally (`http://127.0.0.1:3900`, region `garage`, bucket `horeca-media`, path-style `true`); on the server the internal Garage service |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_FORCE_PATH_STYLE` | **Web and worker only** (not migrate). Media storage (product images, invoice PDFs) via the S3 API — Garage locally (`http://127.0.0.1:3900`, region `garage`, bucket `horeca-media`, path-style `true`); on the server the internal Garage service |
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | The app's key (read/write on that one bucket only), printed once by `scripts/garage-setup.sh` |
 | `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN` | Garage's own secrets, read by the Garage container only (RPC secret: `openssl rand -hex 32`) |
-| `MEDIA_DIR` | **Being removed** (decision 013): still required by `src/env.core.ts` until the storage module moves to S3 (D5-B3) |
 | `EMAIL_FROM`, `SMTP_URL` | SMTP to Mailpit in every environment |
 | `REGISTRATION_OPEN` | `true` / `false` — close registration on production if needed |
 | `SEED_DEMO_PASSWORD` | Password for seeded demo accounts; required on production (never the README password) |
@@ -259,7 +258,7 @@ flowchart LR
   | worker | `node dist/worker.mjs` | needs `DATABASE_WORKER_URL`, `SMTP_URL`, …; Chromium headless shell for PDFs |
   | migrate | `node dist/migrate.mjs` | one-shot, `DATABASE_MIGRATE_URL` only; exits non-zero on failure |
 
-  No media volume: media lives in the environment's Garage, reached over the S3 API (decision 013). The image still sets `MEDIA_DIR=/data/media` until D5-B3 removes it from `src/env.core.ts`. The image has no `curl`: a Compose healthcheck uses `node -e "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"`. Run containers with `init: true` so signals reach Node.
+  No media volume: media lives in the environment's Garage, reached over the S3 API (decision 013). The image has no `curl`: a Compose healthcheck uses `node -e "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"`. Run containers with `init: true` so signals reach Node.
   `--build-arg INSTALL_CHROMIUM=0` skips the Chromium download (fonts stay) for local builds on a network that blocks `storage.googleapis.com` — that image cannot render PDFs; CI and the release image always use the default `1`.
 - **Migrations** run as a one-off `migrate` container using Drizzle's runtime migrator.
 - **Deploy** over SSH as the dedicated `deploy` user running `deploy.sh <env> <sha>`. The server is reachable only through Tailscale, so the deploy job first joins the tailnet with the official **Tailscale GitHub Action** (`tailscale/github-action@v4`) using **Tailscale federated identity (workload identity federation)** — no long-lived Tailscale secret. The workflow sets `permissions: id-token: write` and passes `oauth-client-id`, `audience` and `tags: tag:ci`. The federated credential trusts only GitHub jobs whose subject matches `repo:horeca-ai-dev@360824986/horeca-marketplace@1470667672:environment:*` (the deploy jobs in the `staging` / `production` Environments). The tailnet grant allows `tag:ci` only `tcp:22` on the server's Tailscale IP. GitHub stores the SSH key (secret) and `TS_OAUTH_CLIENT_ID` + `TS_AUDIENCE` (identifiers, not sensitive) per Environment.

@@ -302,7 +302,7 @@ export const productImages = pgTable(
     /** 0 = main image. Max 8 images per product. */
     position: smallint("position").notNull(),
     alt: text("alt"),
-    /** Key of the uploaded original on the media volume. The 3 WebP sizes (320 / 640 / 1280 px) are NOT stored as columns: they are found by convention, `<image id>/<width>.webp`. */
+    /** Object key of the uploaded original in the media bucket (S3, decision 013). The 3 WebP sizes (320 / 640 / 1280 px) are NOT stored as columns: they are found by convention, `<image id>/<width>.webp`. */
     originalKey: text("original_key").notNull(),
     contentType: text("content_type").notNull(),
     sizeBytes: integer("size_bytes").notNull(),

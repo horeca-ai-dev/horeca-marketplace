@@ -19,3 +19,66 @@ allowBuilds:
 overrides:
   "@tanstack/react-store": 0.11.2
   "@tanstack/store": 0.11.2
+
+# Our two-week rule (CLAUDE.md rule 17) enforced by pnpm itself: a version is only resolved once it has been
+# published for 14 days (the value is in minutes). Needed since @aws-sdk/client-s3 (D5-B3b): its dependency
+# ranges are open and the AWS packages are released almost daily, so a plain install pulls in a dozen
+# packages younger than two weeks. Only NEW resolutions are affected; the overrides above stay as they are.
+minimumReleaseAge: 20160
+# pnpm also checks the packages ALREADY in pnpm-lock.yaml against that rule. These 51 exact versions (installed
+# before the rule existed: typescript-eslint, Babel, browserslist, jose, cron-parser, next-intl's formatjs …) were
+# younger than 14 days on 27.11.2026. They are listed here, as exact versions, and nothing else is.
+# TEMPORARY: the newest of them (typescript-eslint 8.74.0, 23.11.) turns 14 days old on 7.12.2026 — on that
+# day delete this whole list (TASKS.md has the reminder). Never add a name here to get a NEW package past the rule.
+minimumReleaseAgeExclude:
+  - "@babel/generator@7.29.15"
+  - "@babel/helper-string-parser@7.29.15"
+  - "@babel/helpers@7.29.15"
+  - "@babel/parser@7.29.15"
+  - "@babel/plugin-transform-typescript@7.29.15"
+  - "@babel/traverse@7.29.15"
+  - "@babel/types@7.29.15"
+  - "@eloqnt/config@0.1.2"
+  - "@eloqnt/format-json@0.1.1"
+  - "@eloqnt/format-po@0.1.2"
+  - "@formatjs/fast-memoize@3.1.8"
+  - "@tybys/wasm-util@0.10.5"
+  - "@typescript-eslint/eslint-plugin@8.74.0"
+  - "@typescript-eslint/parser@8.74.0"
+  - "@typescript-eslint/project-service@8.74.0"
+  - "@typescript-eslint/scope-manager@8.74.0"
+  - "@typescript-eslint/tsconfig-utils@8.74.0"
+  - "@typescript-eslint/type-utils@8.74.0"
+  - "@typescript-eslint/types@8.74.0"
+  - "@typescript-eslint/typescript-estree@8.74.0"
+  - "@typescript-eslint/utils@8.74.0"
+  - "@typescript-eslint/visitor-keys@8.74.0"
+  - "argue-cli@3.2.1"
+  - "axe-core@4.14.1"
+  - "bare-buffer@3.7.3"
+  - "bare-fs@4.8.7"
+  - "bare-url@2.5.8"
+  - "baseline-browser-mapping@2.11.39"
+  - "brace-expansion@5.1.0"
+  - "browserslist@4.29.6"
+  - "caniuse-lite@1.0.30001827"
+  - "cron-parser@5.10.6"
+  - "csstype@3.2.4"
+  - "electron-to-chromium@1.5.492"
+  - "icu-minify@4.15.3"
+  - "ignore@7.0.16"
+  - "intl-messageformat@12.2.1"
+  - "jose@6.2.18"
+  - "minimatch@11.0.9"
+  - "node-releases@2.0.65"
+  - "object-inspect@1.14.0"
+  - "rrule-temporal@2.3.0"
+  - "set-cookie-parser@3.2.3"
+  - "source-map-js@1.2.4"
+  - "tar-fs@2.1.6"
+  - "tar-fs@3.1.4"
+  - "tar-stream@3.3.0"
+  - "tinybench@6.2.5"
+  - "typescript-eslint@8.74.0"
+  - "undici@8.13.1"
+  - "update-browserslist-db@1.4.0"
