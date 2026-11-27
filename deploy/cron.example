@@ -3,8 +3,10 @@
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# Production nightly backup — uncomment with D5-A1, once horeca-production is running.
-# 15 3 * * * deploy /opt/horeca/bin/backup.sh production >>/var/backups/horeca/backup.log 2>&1
+# Production nightly backup (D5-A1): pg_dump → /var/backups/horeca/production/nightly/ (newest 7 kept)
+# + media copy over the S3 API → /var/backups/horeca/production/media/. Pre-deploy dumps are separate
+# (deploy.sh → pre-deploy/, newest 5). backup.sh refuses to run before the first production deploy.
+15 3 * * * deploy /opt/horeca/bin/backup.sh production >>/var/backups/horeca/backup.log 2>&1
 
 # Staging is not backed up (policy). Test the script once by hand instead:
 #   sudo -u deploy /opt/horeca/bin/backup.sh staging
