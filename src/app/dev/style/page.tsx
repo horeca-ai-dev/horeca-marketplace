@@ -10,6 +10,8 @@
 import type { ReactNode } from "react";
 import { CONTRAST_PAIRS, contrastRatio } from "@/lib/design/contrast";
 import { COLOR_TOKENS, tokenHex } from "@/lib/design/tokens";
+import { ComponentsSection } from "./components-section";
+import { Section } from "./section";
 import { TileAdd } from "./tile-add";
 
 const SAMPLE = "Profesionalni frižider za restoran — 1.234,56 €";
@@ -20,28 +22,6 @@ const PRICES = [
   "78,00 €",
   "4.107,41 €",
 ];
-
-function Section({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="border-t border-border py-8">
-      <h2 className="text-xl">{title}</h2>
-      {note ? (
-        <p className="mt-1 max-w-[70ch] text-sm text-muted-foreground">
-          {note}
-        </p>
-      ) : null}
-      <div className="mt-6">{children}</div>
-    </section>
-  );
-}
 
 // ── Badges: tint + dot + label. Not clickable, so no border, no solid fill, smaller than any button.
 const TONES = {
@@ -320,7 +300,9 @@ function ModeOption({
   );
 }
 
-export default function StylePreviewPage() {
+export default async function StylePreviewPage({
+  searchParams,
+}: PageProps<"/dev/style">) {
   return (
     <main className="mx-auto w-full max-w-[1200px] px-4 pb-16 font-sans md:px-8">
       <header className="py-8">
@@ -716,6 +698,8 @@ export default function StylePreviewPage() {
           </fieldset>
         </div>
       </Section>
+
+      <ComponentsSection searchParams={await searchParams} />
     </main>
   );
 }
