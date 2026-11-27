@@ -43,6 +43,13 @@
       "when": 1795710165401,
       "tag": "0005_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795799499902,
+      "tag": "0006_agreements_payments_stock",
+      "breakpoints": true
     }
   ]
 }

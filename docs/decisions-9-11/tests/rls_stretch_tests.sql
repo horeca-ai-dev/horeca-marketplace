@@ -1,4 +1,4 @@
--- Stretch RLS tests (full schema). Runs after rls_tests.sql in the same database.
+-- Stretch RLS tests (S1, S5). Runs after rls_tests.sql in the same database. (The S6 card-payment checks moved into rls_tests.sql, section 9, with D5-B0.)
 \set ON_ERROR_STOP 1
 INSERT INTO buyer_prices (product_id, supplier_org_id, buyer_org_id, unit_price_cents, valid_from)
 VALUES ('33333333-0000-0000-0000-00000000000b', 'o-sup-b', 'o-hotel', 44000, current_date);
@@ -23,16 +23,5 @@ SELECT expect_eq('S5: NOT invited supplier does not see the RFQ', (SELECT count(
 SELECT expect_fail('S5: NOT invited supplier cannot quote',
   $$INSERT INTO rfq_quotes (rfq_id, supplier_org_id, buyer_org_id, unit_price_cents, vat_rate_bps, lead_time_days, valid_until)
     VALUES ('77777777-0000-0000-0000-000000000001', 'o-sup-p', 'o-hotel', 1, 2100, 1, current_date)$$);
-ROLLBACK;
-BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-hotel', 'o-hotel', 'buyer', 'owner');
-INSERT INTO payments (id, order_id, buyer_org_id, idempotency_key, amount_cents) VALUES
- ('88888888-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001', 'o-hotel', 'pay-1', 100);
-SELECT expect_fail('S6: buyer cannot fake a callback event',
-  $$INSERT INTO payment_events (payment_id, provider_event_id, type, signature_valid, raw) VALUES ('88888888-0000-0000-0000-000000000001', 'evt-x', 'succeeded', true, '{}')$$);
-COMMIT;
-BEGIN; SET LOCAL ROLE horeca_worker;
-INSERT INTO payment_events (payment_id, provider_event_id, type, signature_valid, raw) VALUES ('88888888-0000-0000-0000-000000000001', 'evt-1', 'succeeded', true, '{}');
-SELECT expect_fail('S6: duplicate callback (same provider_event_id) is rejected',
-  $$INSERT INTO payment_events (payment_id, provider_event_id, type, signature_valid, raw) VALUES ('88888888-0000-0000-0000-000000000001', 'evt-1', 'succeeded', true, '{}')$$);
 ROLLBACK;
 SELECT 'ALL STRETCH RLS TESTS PASSED' AS result;

@@ -23,10 +23,13 @@
  *   sub_order_events      buyer + supplier    · same as sub_orders; insert-only
  *   proforma_invoices     buyer               · buyer own; platform; worker (PDF). Suppliers: no access
  *   order_payments        buyer (read)        · buyer read own; worker insert; insert-only
+ *   payments              buyer               · buyer own (insert `created`, mark `pending`); worker updates; platform read
+ *   payment_events        platform / worker   · worker only (SELECT + INSERT); no web access in the MVP
  */
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   char,
   check,
   date,
@@ -411,8 +414,11 @@ export const orderPayments = pgTable(
     type: orderPaymentType("type").notNull(),
     amountCents: cents("amount_cents").notNull(),
     bankReference: text("bank_reference"),
-    /** FK to `payments` is added by the D5-B0 migration (the table does not exist yet). Unique: one row per gateway payment. */
-    paymentId: uuid("payment_id").unique(),
+    /**
+     * The card payment this row came from (D5-B0). One payment has one receipt but may have several refunds
+     * (one per cancelled platform sub-order), so uniqueness is only on the receipt — see the index below.
+     */
+    paymentId: uuid("payment_id").references(() => payments.id),
     /** NULL for rows the worker inserts from gateway events. */
     recordedByUserId: text("recorded_by_user_id").references(() => user.id),
     note: text("note"),
@@ -420,10 +426,93 @@ export const orderPayments = pgTable(
   },
   (t) => [
     index("order_payments_order_idx").on(t.orderId),
+    // 0004 had UNIQUE (payment_id), which would have blocked a refund of the same payment (receipt + refund).
+    uniqueIndex("order_payments_one_receipt_per_payment_uq")
+      .on(t.paymentId)
+      .where(sql`${t.type} = 'receipt'`),
     check("order_payments_positive", sql`${t.amountCents} > 0`),
     check(
       "order_payments_recorded",
       sql`${t.recordedByUserId} IS NOT NULL OR ${t.paymentId} IS NOT NULL`,
     ),
   ],
+);
+
+// ───────────────────────── card payments (mock gateway, decision 012 §6) ─────────────────────────
+
+/** `created → pending → succeeded | failed | cancelled | expired` (012 §6; `expired` added in D5-B0). */
+export const paymentStatus = pgEnum("payment_status", [
+  "created",
+  "pending",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "expired",
+]);
+
+/**
+ * One card payment attempt for the platform part of an order. The buyer inserts it as `created` and, after the
+ * gateway answered, marks it `pending` (the only update the web login may do); everything after that —
+ * `succeeded`, `failed`, `expired`, `refunded_cents` — is written by the worker from signed gateway events.
+ * Several attempts per order are allowed, but at most one may be `succeeded`.
+ * No card data is ever stored here (CLAUDE.md security rules).
+ */
+export const payments = pgTable(
+  "payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id),
+    buyerOrgId: orgRef("buyer_org_id"),
+    provider: text("provider").notNull().default("mock"),
+    /** The provider's payment ID; NULL until the gateway answered. */
+    providerRef: text("provider_ref").unique(),
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    status: paymentStatus("status").notNull().default("created"),
+    amountCents: cents("amount_cents").notNull(),
+    /** Total refunded so far (Σ refund events); bumped by the worker. */
+    refundedCents: cents("refunded_cents").notNull().default(0),
+    currency: char("currency", { length: 3 }).notNull().default("EUR"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("payments_order_idx").on(t.orderId),
+    uniqueIndex("payments_one_succeeded_per_order_uq")
+      .on(t.orderId)
+      .where(sql`${t.status} = 'succeeded'`),
+    check("payments_amount_positive", sql`${t.amountCents} > 0`),
+    check(
+      "payments_refunded",
+      sql`${t.refundedCents} BETWEEN 0 AND ${t.amountCents}
+          AND (${t.refundedCents} = 0 OR ${t.status} = 'succeeded')`,
+    ),
+  ],
+);
+
+/**
+ * Every callback the worker processed (the route handler enqueues only events with a valid signature).
+ * `provider_event_id` is unique: a duplicate callback is a no-op. Insert-only (worker: SELECT + INSERT).
+ */
+export const paymentEvents = pgTable(
+  "payment_events",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    paymentId: uuid("payment_id")
+      .notNull()
+      .references(() => payments.id),
+    providerEventId: text("provider_event_id").notNull().unique(),
+    type: text("type").notNull(),
+    /** HMAC verified in constant time (CLAUDE.md security rules). */
+    signatureValid: boolean("signature_valid").notNull(),
+    amountCents: cents("amount_cents"),
+    raw: jsonb("raw").notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("payment_events_payment_idx").on(t.paymentId)],
 );
