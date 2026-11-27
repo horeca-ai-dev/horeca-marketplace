@@ -15,7 +15,8 @@
 #                                    from the bucket stay here, so this directory only grows (fine at our
 #                                    size). Restore = copy back through the S3 API.
 #
-# TODO(D5-A1): pre-deploy dumps (keep 5) are taken by deploy.sh production, not here.
+# Pre-deploy dumps (pre-deploy/, newest 5) are taken by `deploy.sh production`, not here.
+# Test a dump with deploy/restore-test.sh.
 # Meilisearch is not backed up: it is rebuilt from Postgres (pnpm search:reindex).
 set -euo pipefail
 # Run from / : started with `sudo -u deploy` from another user's home, the inherited working directory
