@@ -6,6 +6,9 @@ import {
   fieldId,
   invalidPaths,
   mapActionError,
+  passwordConfirmErrorKey,
+  requestResetErrorKey,
+  resetPasswordErrorKey,
   signInErrorKey,
 } from "./form-errors";
 
@@ -170,5 +173,63 @@ describe("fieldId", () => {
   it("turns a form path into a DOM id", () => {
     expect(fieldId("company.taxId")).toBe("company-taxId");
     expect(fieldId("email")).toBe("email");
+  });
+});
+
+describe("requestResetErrorKey", () => {
+  it("shows the rate-limit message for HTTP 429", () => {
+    expect(requestResetErrorKey({ status: 429 })).toBe(
+      "auth.errors.form.rateLimited",
+    );
+  });
+
+  it("shows the generic message for anything else (never about the account)", () => {
+    expect(requestResetErrorKey({ status: 400 })).toBe(
+      "auth.errors.form.generic",
+    );
+    expect(requestResetErrorKey({})).toBe("auth.errors.form.generic");
+  });
+});
+
+describe("resetPasswordErrorKey", () => {
+  it("calls an expired, used or unknown token an invalid link", () => {
+    expect(resetPasswordErrorKey({ status: 400, code: "INVALID_TOKEN" })).toBe(
+      "auth.errors.form.invalidResetLink",
+    );
+    expect(resetPasswordErrorKey({ code: "USER_NOT_FOUND" })).toBe(
+      "auth.errors.form.invalidResetLink",
+    );
+  });
+
+  it("maps a password the server finds too short or too long to 'validation'", () => {
+    expect(resetPasswordErrorKey({ code: "PASSWORD_TOO_SHORT" })).toBe(
+      "auth.errors.form.validation",
+    );
+    expect(resetPasswordErrorKey({ code: "PASSWORD_TOO_LONG" })).toBe(
+      "auth.errors.form.validation",
+    );
+  });
+
+  it("shows the rate-limit message for 429 and the generic one otherwise", () => {
+    expect(resetPasswordErrorKey({ status: 429 })).toBe(
+      "auth.errors.form.rateLimited",
+    );
+    expect(resetPasswordErrorKey({ status: 500 })).toBe(
+      "auth.errors.form.generic",
+    );
+  });
+});
+
+describe("passwordConfirmErrorKey", () => {
+  it("says 'required' when empty and 'mismatch' otherwise", () => {
+    expect(passwordConfirmErrorKey("")).toBe(
+      "auth.errors.passwordConfirm.required",
+    );
+    expect(passwordConfirmErrorKey(undefined)).toBe(
+      "auth.errors.passwordConfirm.required",
+    );
+    expect(passwordConfirmErrorKey("abc")).toBe(
+      "auth.errors.passwordConfirm.mismatch",
+    );
   });
 });

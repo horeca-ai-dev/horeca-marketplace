@@ -1,20 +1,21 @@
 /**
- * Placeholder so the "Zaboravili ste lozinku?" link on the login page leads somewhere. The real
- * forgot / reset password pages replace this file in D5-A2.
+ * /forgot-password (D5-A2): e-mail → Better Auth's reset request. The answer never says whether an
+ * account exists (see ForgotPasswordForm). Open to everybody, logged in or not.
+ *
+ * The e-mail itself is sent by Better Auth's `sendResetPassword` hook, wired in D6-B3 — until then
+ * the request answers 400 RESET_PASSWORD_DISABLED and the form shows the generic error.
  */
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
+import { ForgotPasswordForm } from "./forgot-password-form";
 
 export default async function ForgotPasswordPage() {
-  const t = await getTranslations();
+  const t = await getTranslations("auth");
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-2xl">{t("auth.forgotPassword.title")}</h1>
-      <p className="text-sm text-muted-foreground">
-        {t("placeholder.description")}
-      </p>
+    <div className="flex flex-col gap-8">
+      <ForgotPasswordForm />
       <Link href="/login" className="text-sm text-primary underline">
-        {t("auth.backToLogin")}
+        {t("backToLogin")}
       </Link>
     </div>
   );
