@@ -17,7 +17,7 @@
  * Not here: the Meilisearch sync (a job enqueued in this same transaction — D7-B3 adds it to create, update
  * and setStatus), Server Actions, screens, image upload (D6-B0).
  */
-import { and, asc, count, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
 import {
   createProductSchema,
@@ -32,7 +32,6 @@ import {
 import { warnIfEmptyRead } from "@/server/db/rls-debug";
 import {
   categories,
-  categoryAttributes,
   orgProfiles,
   products,
   settings,
@@ -45,6 +44,7 @@ import {
   type AttributeDefinition,
   type AttributeValues,
 } from "./attributes";
+import { loadAttributeDefinitions } from "./categories";
 import { Conflict, NotFound, Validation } from "./errors";
 import { assertCan } from "./policy";
 import { transitionProduct } from "./product-status";
@@ -119,31 +119,6 @@ async function assertVatRateAllowed(tx: Tx, vatRateBps: number) {
       ],
     });
   }
-}
-
-/** Attribute definitions of the category AND its ancestors (ltree: `a @> b` = a is b or an ancestor of b). */
-async function loadAttributeDefinitions(
-  tx: Tx,
-  categoryId: string,
-): Promise<AttributeDefinition[]> {
-  return tx
-    .select({
-      key: categoryAttributes.key,
-      label: categoryAttributes.label,
-      type: categoryAttributes.type,
-      unit: categoryAttributes.unit,
-      required: categoryAttributes.required,
-      options: categoryAttributes.options,
-      minValue: categoryAttributes.minValue,
-      maxValue: categoryAttributes.maxValue,
-      isActive: categoryAttributes.isActive,
-    })
-    .from(categoryAttributes)
-    .innerJoin(categories, eq(categories.id, categoryAttributes.categoryId))
-    .where(
-      sql`${categories.path} @> (select c.path from categories c where c.id = ${categoryId})`,
-    )
-    .orderBy(asc(categories.depth), asc(categoryAttributes.position));
 }
 
 /**
