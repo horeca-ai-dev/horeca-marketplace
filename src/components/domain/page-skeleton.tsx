@@ -33,9 +33,9 @@ export function PageSkeleton({
     <div aria-busy="true" data-slot="page-skeleton">
       <span className="sr-only">{t("loading")}</span>
       {/* PageHeader: H1 (36 px line) and the optional sentence under it (24 px line). */}
-      <Skeleton className="h-9 w-64 max-w-full" />
+      <Skeleton className="h-9 w-full max-w-64" />
       {withDescription ? (
-        <Skeleton className="mt-1 h-6 w-96 max-w-full" />
+        <Skeleton className="mt-1 h-6 w-full max-w-96" />
       ) : null}
       {/* The first section starts 32 px below the header; then the table header (40 px) and rows. */}
       <div className="mt-8 border-t border-border">
