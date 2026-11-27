@@ -213,5 +213,12 @@
       "out_of_stock": "Nema na stanju",
       "unknown": "Dostupnost nepoznata"
     }
+  },
+  "common": {
+    "loading": "Učitavamo…"
+  },
+  "toast": {
+    "region": "Obavještenja ({hotkey})",
+    "close": "Zatvorite obavještenje"
   }
 }
