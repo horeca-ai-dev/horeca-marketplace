@@ -1,4 +1,4 @@
--- RLS integration tests for migrations 0005 (RLS) and 0006 (D5-B0: contracts, payments, stock, system cancel); run after ALL migrations, as the superuser.
+-- RLS integration tests for migrations 0005 (RLS), 0006 (D5-B0: contracts, payments, stock, system cancel) and 0007 (member read of org_profiles); run after ALL migrations, as the superuser.
 -- Edited for D4-B2 exactly as docs/decisions-9-11/APPLIED.md lists (decision 012, invoice sequence, no thumb_key,
 -- checkout locking); run by scripts/test-rls.sh against the real migrations — never by run_db_tests.sh.
 -- Every block switches to the app (or worker) role and sets the actor context exactly like withTx() does.
@@ -729,6 +729,62 @@ UPDATE sub_orders SET status = 'shipped' WHERE id = '99999999-0000-0000-0000-000
 SET LOCAL ROLE horeca_worker;
 SELECT expect_fail('a shipped sub-order is refused',
   $$SELECT app.system_cancel_sub_order('99999999-0000-0000-0000-0000000000b1', 'supplier API rejected')$$);
+ROLLBACK;
+
+-- ═════════════ 10. Issue #63: a member reads the profiles of ALL their organizations (migration 0007) ═════════════
+-- Fixtures (superuser). `u-multi` belongs to the hotel, to the cafe (two buyers) and to the pending supplier P;
+-- `u-hotel` and `u-cafe` belong to their own buyer only. Before 0007 a buyer could never read another buyer's
+-- profile, nor a pending supplier's: only its own, the platform's view and approved suppliers.
+INSERT INTO "user" (id, email, name) VALUES ('u-multi', 'multi-rls@demo.local', 'Multi');
+INSERT INTO member (id, organization_id, user_id, role, created_at) VALUES
+ ('m-multi-hotel', 'o-hotel', 'u-multi', 'owner', now()),
+ ('m-multi-cafe', 'o-cafe', 'u-multi', 'owner', now()),
+ ('m-multi-p', 'o-sup-p', 'u-multi', 'member', now()),
+ ('m-hotel', 'o-hotel', 'u-hotel', 'owner', now()),
+ ('m-cafe', 'o-cafe', 'u-cafe', 'owner', now());
+
+BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-multi', 'o-hotel', 'buyer', 'owner');
+SELECT expect_eq('a member reads the profile of EVERY organization they belong to (acting as the hotel: + cafe + pending supplier P)',
+  (SELECT string_agg(organization_id, ',' ORDER BY organization_id) FROM org_profiles), 'o-cafe,o-hotel,o-sup-a,o-sup-b,o-sup-p');
+SELECT expect_eq('the type and legal name of the NOT active organization are readable',
+  (SELECT type::text || '|' || legal_name FROM org_profiles WHERE organization_id = 'o-cafe'), 'buyer|Cafe Luna d.o.o.');
+SELECT expect_eq('another organization of the user is still not the one they act for: its profile cannot be changed (0 rows)',
+  rows_affected($q$UPDATE org_profiles SET legal_name = 'hacked' WHERE organization_id = 'o-cafe'$q$), 0::bigint);
+SELECT expect_fail('… and the guard / policy for a profile INSERT is untouched: no new profile in another organization''s name',
+  $$INSERT INTO org_profiles (organization_id, type, status, legal_name, tax_id, address_line, city, postal_code, contact_email)
+    VALUES ('o-new', 'buyer', 'approved', 'X', '09999999', 'x', 'x', '81000', 'x@demo.local')$$);
+SELECT expect_eq('the new policy opens org_profiles ONLY: other organizations'' bank details and locations stay closed',
+  (SELECT count(*) FROM supplier_profiles WHERE organization_id = 'o-sup-p') + (SELECT count(*) FROM buyer_locations WHERE organization_id = 'o-cafe'), 0::bigint);
+ROLLBACK;
+
+BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-hotel', 'o-hotel', 'buyer', 'owner');
+SELECT expect_eq('a buyer with ONE membership sees exactly what it saw before: itself and the approved suppliers',
+  (SELECT string_agg(organization_id, ',' ORDER BY organization_id) FROM org_profiles), 'o-hotel,o-sup-a,o-sup-b');
+SELECT expect_eq('a non-member does not see another buyer''s profile', (SELECT count(*) FROM org_profiles WHERE organization_id = 'o-cafe'), 0::bigint);
+ROLLBACK;
+
+BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-cafe', 'o-cafe', 'buyer', 'owner');
+SELECT expect_eq('a non-member does not see a PENDING supplier''s profile (only its members do)',
+  (SELECT count(*) FROM org_profiles WHERE organization_id = 'o-sup-p'), 0::bigint);
+ROLLBACK;
+
+-- Removing the membership removes the visibility with it.
+BEGIN;
+DELETE FROM member WHERE id = 'm-multi-cafe';
+SET LOCAL ROLE horeca_app; SELECT actor('u-multi', 'o-hotel', 'buyer', 'owner');
+SELECT expect_eq('after the membership is removed the organization disappears again',
+  (SELECT count(*) FROM org_profiles WHERE organization_id = 'o-cafe'), 0::bigint);
+SELECT expect_eq('… while the others stay', (SELECT count(*) FROM org_profiles WHERE organization_id IN ('o-hotel', 'o-sup-p')), 2::bigint);
+ROLLBACK;
+
+-- No actor context: app.user_id() is NULL, so the membership policy matches nothing.
+BEGIN; SET LOCAL ROLE horeca_app;
+SELECT expect_eq('no actor: still nothing, with the new policy and members present', (SELECT count(*) FROM org_profiles), 0::bigint);
+ROLLBACK;
+
+-- The platform and the worker are unaffected (they have their own policies).
+BEGIN; SET LOCAL ROLE horeca_app; SELECT actor('u-admin', 'o-platform', 'platform', 'owner');
+SELECT expect_eq('the platform still reads every profile (7 fixtures)', (SELECT count(*) FROM org_profiles), 7::bigint);
 ROLLBACK;
 
 SELECT 'ALL RLS TESTS PASSED' AS result;

@@ -50,6 +50,13 @@
       "when": 1795799499902,
       "tag": "0006_agreements_payments_stock",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795811815036,
+      "tag": "0007_member_read_org_profiles",
+      "breakpoints": true
     }
   ]
 }
