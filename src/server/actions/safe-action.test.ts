@@ -27,6 +27,7 @@ describe("handleServerError", () => {
     "EMAIL_TAKEN",
     "ALREADY_HAS_COMPANY",
     "SKU_TAKEN",
+    "DEFAULT_LOCATION_ARCHIVE",
   ])("passes the Conflict reason %s to the client", async (reason) => {
     const result = await failing(new Conflict("Taken.", { reason }))();
     expect(result.serverError).toEqual({

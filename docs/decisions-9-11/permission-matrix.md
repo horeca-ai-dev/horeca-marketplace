@@ -95,9 +95,9 @@ foreign-key must equal `actor.orgId`. Every row becomes at least two tests: allo
 | `org.register` | logged-in user without an org | creates org + member(owner) + profile in one tx | supplier → `pending`, buyer → `approved` | — |
 | `org.switchActive` | any member | membership re-checked in `member` | — | — |
 | `orgProfile.view` | B\*, S\*, P | own; P all | — | — |
-| `orgProfile.update` | Bo, So, P | own; P all | tax ID: P only | ✓ (legal data) |
-| `supplierProfile.viewBankDetails` | So, P | own | — | — |
-| `supplierProfile.updateBankDetails` | So | own | — | ✓ |
+| `orgProfile.update` | Bo, So, P | own; P all (MVP: the platform edits its own organization only) | tax ID: P only (403 otherwise); a tax ID already taken by the same type → 409 `TAX_ID_TAKEN`; type and status are not editable | ✓ (legal data; only the fields that changed) |
+| `supplierProfile.viewBankDetails` | So, P | own | members get 403 | — |
+| `supplierProfile.updateBankDetails` | So | own | IBAN: Montenegrin, 22 characters, mod-97 check; a change is audited with the number masked | ✓ |
 | `supplier.reapply` | So | own | `rejected` → `pending` | ✓ |
 | `supplier.approve` | P | — | `pending`; IBAN present | ✓ |
 | `supplier.reject` | P | — | `pending`; reason required | ✓ |
@@ -105,7 +105,7 @@ foreign-key must equal `actor.orgId`. Every row becomes at least two tests: allo
 | `supplier.reinstate` | P | — | `suspended` → `approved` | ✓ |
 | `supplier.setCommissionOverride` | P | — | — | ✓ |
 | `buyerLocation.list` | B\*, P | own | — | — |
-| `buyerLocation.create` / `.update` / `.archive` | B\* | own | — | — |
+| `buyerLocation.create` / `.update` / `.archive` | B\* | own | the default location cannot be archived (409 `DEFAULT_LOCATION_ARCHIVE`); an archived location cannot be edited; never deleted | — |
 
 ### Catalogue
 | Action | Allowed | Ownership | Status preconditions | Audited |
