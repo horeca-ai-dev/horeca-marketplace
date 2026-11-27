@@ -166,7 +166,7 @@ foreign-key must equal `actor.orgId`. Every row becomes at least two tests: allo
 | Table | Owner org type | RLS policies (rls.sql) | Actions that touch it |
 |---|---|---|---|
 | Better Auth: `user`, `session`, `account`, `verification`, `organization`, `member`, `invitation` | — | **none** (library-managed; app layer protects them) | `org.register`, `org.switchActive`, `member.*` |
-| `org_profiles` | all | own · approved suppliers to logged-in · P · worker read · guard trigger | `org.register`, `orgProfile.*`, `supplier.*` |
+| `org_profiles` | all | own · **the profiles of every organization the user is a member of** (0007, read only) · approved suppliers to logged-in · P · worker read · guard trigger | `org.register`, `orgProfile.*`, `supplier.*`, `org.switchActive` (`listMyOrganizations`) |
 | `supplier_profiles` | supplier | owner only · P · guard trigger (commission) | `supplierProfile.*`, `supplier.setCommissionOverride` |
 | `buyer_locations` | buyer | own buyer · P read | `buyerLocation.*`, `checkout.placeOrder` |
 | `categories` | platform | read: logged-in · write: P | `category.*`, `catalogue.search` |
