@@ -152,5 +152,66 @@
   },
   "placeholder": {
     "description": "Ovaj ekran još nije izrađen."
+  },
+  "status": {
+    "subOrder": {
+      "pending": "Na čekanju",
+      "confirmed": "Potvrđeno",
+      "shipped": "Poslato",
+      "delivered": "Isporučeno",
+      "cancelled": "Otkazano"
+    },
+    "order": {
+      "in_progress": "U toku",
+      "completed": "Završeno",
+      "cancelled": "Otkazano"
+    },
+    "orderPayment": {
+      "unpaid": "Nije plaćeno",
+      "paid": "Plaćeno",
+      "refund_due": "Povraćaj u toku",
+      "not_applicable": "Ne plaća se platformi"
+    },
+    "cardPayment": {
+      "created": "Čeka uplatu",
+      "pending": "Čeka uplatu",
+      "succeeded": "Plaćeno",
+      "failed": "Odbijeno",
+      "cancelled": "Prekinuto",
+      "expired": "Isteklo",
+      "refunded": "Vraćeno {amount}"
+    },
+    "contract": {
+      "requested": "Zatražen",
+      "active": "Aktivan",
+      "rejected": "Odbijen",
+      "ended": "Okončan"
+    },
+    "purchaseMode": {
+      "direct": "Direktno",
+      "platform": "Kartica"
+    },
+    "submission": {
+      "pending": "Slanje u toku",
+      "accepted": "Prihvaćeno",
+      "rejected": "Odbijeno",
+      "failed": "Slanje nije uspjelo"
+    },
+    "product": {
+      "draft": "Nacrt",
+      "active": "Aktivan",
+      "archived": "Arhiviran"
+    },
+    "supplier": {
+      "pending": "Na čekanju",
+      "approved": "Aktivan",
+      "rejected": "Odbijen",
+      "suspended": "Suspendovan"
+    },
+    "stock": {
+      "in_stock": "Na stanju · {qty} {unit}",
+      "out_of_stock": "Nema na stanju",
+      "unknown": "Dostupnost nepoznata"
+    }
   }
 }
