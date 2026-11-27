@@ -58,6 +58,7 @@ export const CONFLICT_REASONS = [
   "EMAIL_TAKEN",
   "ALREADY_HAS_COMPANY",
   "SKU_TAKEN",
+  "DEFAULT_LOCATION_ARCHIVE",
 ] as const;
 export type ConflictReason = (typeof CONFLICT_REASONS)[number];
 
