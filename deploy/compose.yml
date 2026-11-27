@@ -192,6 +192,33 @@ services:
       retries: 10
     logging: *logging
 
+  # One-off: backup.sh runs `docker compose run --rm media-backup`. Not started by `up`.
+  # Object-level copy of the bucket through the S3 API into /var/backups/horeca/<env>/media/.
+  # `copy`, not `sync`: objects deleted from the bucket stay in the backup (it only grows).
+  # rclone is configured only through RCLONE_CONFIG_* variables — the key never appears on a command
+  # line, in `ps` or in the log.
+  media-backup:
+    image: rclone/rclone:1.75.2
+    profiles: ["backup"]
+    restart: "no"
+    # --verbose: one line per copied object + a summary at the end (no object contents, no keys).
+    command: ["copy", "garage:${S3_BUCKET}", "/backup", "--verbose"]
+    environment:
+      RCLONE_CONFIG_GARAGE_TYPE: s3
+      RCLONE_CONFIG_GARAGE_PROVIDER: Other
+      RCLONE_CONFIG_GARAGE_ENDPOINT: ${S3_ENDPOINT}
+      RCLONE_CONFIG_GARAGE_REGION: ${S3_REGION}
+      RCLONE_CONFIG_GARAGE_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+      RCLONE_CONFIG_GARAGE_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      RCLONE_CONFIG_GARAGE_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      # Runs as the calling user (backup.sh passes --user): no home, no config file needed.
+      RCLONE_CONFIG: /dev/null
+      HOME: /tmp
+    volumes:
+      - /var/backups/horeca/${APP_ENV}/media:/backup
+    mem_limit: 128m
+    logging: *logging
+
   # TODO(D6-A3): mock-services (4th entry of the image) — card gateway + supplier stock API, routed by
   # our Nginx at /gateway/. Until then PAYMENT_GATEWAY_URL / SUPPLIER_API_URL point at nothing.
 
