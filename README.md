@@ -245,8 +245,9 @@ flowchart LR
   REV --> IMG[Build image once<br/>tag = SHA → GHCR]
   IMG --> STG[Staging: migrate → restart<br/>→ health → E2E smoke]
   STG --> APR{Manual approval}
-  APR --> PROD[Production: backup → migrate<br/>→ restart → health]
-  PROD -->|healthy| TAG[Tag vX.Y.Z + GitHub Release]
+  APR --> PROD[Production: pg_dump → migrate<br/>→ restart → health]
+  PROD -->|healthy| PSMK[Read-only<br/>production smoke]
+  PSMK -->|passed| TAG[Tag vX.Y.Z + GitHub Release]
   PROD -->|unhealthy| RB[Manual: redeploy previous SHA]
 ```
 - **PR checks** run in parallel on GitHub runners (target < 10 min); a new push cancels the stale run. *Migration check* = `drizzle-kit check` + applying all migrations to an empty database; *RLS SQL tests* = `rls_tests.sql` via `psql`.
@@ -273,17 +274,18 @@ flowchart LR
 - **Production** deploys the same image after manual approval. Required reviewers: both team members.
 
 ### Approving a production deploy
-1. Actions → open the workflow run → **Review deployments**.
+1. Actions → open the workflow run → **Review deployments** (shown once `smoke test staging` has passed).
 2. Select `production` → **Approve and deploy**.
-3. Only one approval request is pending at a time (concurrency group `production`). A newer merge replaces the older request, so approving ships everything merged since the last production deploy.
+3. Only one approval request is pending at a time (concurrency group `production`). A newer merge replaces the older request, so approving ships everything merged since the last production deploy. A running production deploy is never cancelled.
+4. After the deploy: `smoke test production` (`scripts/smoke-production.sh`: health, the login page renders, a wrong password → 401 — **read-only, no sign-up, no test data**) and then `tag the release`.
 
 ### Releases & versioning
-- After a production deploy passes its health check, CI automatically:
-  - calculates the next version from Conventional Commits since the last tag (`fix:` → patch, `feat:` → minor),
-  - creates the Git tag `vX.Y.Z` and a GitHub Release with generated notes,
-  - tags the Docker image with the same version.
-- A tag exists only for versions that actually ran in production. Failed or rolled-back deploys are never tagged.
-- During development versions are `0.x.y`; `v1.0.0` is cut manually for the final demo.
+- After a production deploy passes its health gate **and** the production smoke test, the `release` job:
+  - runs `scripts/next-version.sh <sha>`: Conventional Commits since the newest `vX.Y.Z` tag that is an ancestor of the deployed SHA — `fix` → patch, `feat` → minor, breaking (`type!:` or a `BREAKING CHANGE:` footer) → major, **but minor while the major is 0**; no tag yet → `v0.1.0`;
+  - creates the tag on the deployed SHA through the GitHub API with the workflow token (`contents: write`, no third-party action) and a GitHub Release whose notes are the commit list.
+- No tag when there is nothing to release: the SHA is already tagged, it is older than the newest release (a rollback), or only `docs` / `chore` / `ci` / … commits since the last tag.
+- A tag exists only for versions that actually ran in production. Failed or rolled-back deploys are never tagged. The Docker image keeps its SHA tag only (no version tag on the image).
+- During development versions are `0.x.y`; `v1.0.0` is cut manually for the final demo (`git tag v1.0.0 <sha> && git push origin v1.0.0` on a SHA that runs in production).
 
 ### Fixing problems
 - CI fails on a PR → push fixes to the same branch; the PR updates.
@@ -291,24 +293,29 @@ flowchart LR
 - Nothing reaches production without passing staging.
 
 ### Rollback (manual)
-- Every production deploy takes a `pg_dump` first.
-- If production is broken after a deploy: re-run the deploy with the previous SHA or release tag (one click); if a migration broke data, restore the pre-deploy dump.
-- The health check gates deploys on Postgres + migration version only; Meilisearch, Mailpit and the worker are reported as degraded, not blocking.
+- Every production deploy takes a `pg_dump` first (`/var/backups/horeca/production/pre-deploy/db-<UTC>-was-<previous SHA, 12>.dump`, newest 5 kept) — before the migration; a failed dump stops the deploy.
+- If production is broken after a deploy, **re-run the deploy with the previous SHA**: Actions → the Deploy run of the previous release (Releases page → its commit) → **Re-run jobs** → `deploy production` (asks for approval again; smoke runs after it; no tag is created for an older SHA). Without GitHub: from a machine on the tailnet with the deploy key, `ssh deploy@<server> "production <previous sha>"`.
+- If a **migration broke data**, the old image will refuse to start (`/api/health` 503: migrations ahead). Then, as an admin on the server: stop web + worker (`docker compose -p horeca-production stop web worker`), check the dump with `deploy/restore-test.sh <dump>`, restore it into the production database (`pg_restore --clean --if-exists --single-transaction --exit-on-error -U postgres -d horeca` via `docker compose exec -T postgres`, dump on stdin), then redeploy the SHA named in the dump's file name. Data written after the dump is lost — say so before doing it. *(This in-place restore is not rehearsed; the restore test covers a fresh throwaway database.)*
+- The health check gates deploys on Postgres + migration version only; Meilisearch, Mailpit, Garage and the worker are reported as degraded, not blocking.
 
-### Deploy files (staging since D3; production half = D5-A1)
+### Deploy files (staging since D3, production since D5-A1)
 | File | Installed on the server as | What it does |
 |---|---|---|
-| `.github/workflows/deploy.yml` | — | push to `main` → build + push `ghcr.io/horeca-ai-dev/horeca-marketplace:<sha>` → join the tailnet → `ssh deploy@… "staging <sha>"` → `scripts/smoke-g0.sh` |
-| `deploy/deploy.sh` | `/opt/horeca/bin/deploy.sh` (root, 755) | the forced command of the deploy key: `staging <sha>` = pull → Postgres up (waits) → Meilisearch, Mailpit, Garage up (never waited for) → migrate (one-off) → `up` web + worker → wait ≤ 90 s for `/api/health` 200 → prune images (keep 5 SHAs); `staging-reset <sha>` = the same after `down --volumes` (**deletes all staging data**, Garage's bucket and key included — run the Garage setup again afterwards, see below; the Postgres init script runs only on an empty volume, so this is also how changed DB passwords take effect; no seed entry yet → staging starts empty); `production …` → "not enabled yet". Log: `/opt/horeca/<env>/deploy.log`; current SHA: `/opt/horeca/<env>/deployed-sha` |
+| `.github/workflows/deploy.yml` | — | push to `main` → build + push `ghcr.io/horeca-ai-dev/horeca-marketplace:<sha>` → join the tailnet → `ssh deploy@… "staging <sha>"` → `scripts/smoke-g0.sh` → **approval** (Environment `production`) → `ssh deploy@… "production <sha>"` → `scripts/smoke-production.sh` → `scripts/next-version.sh` → tag + GitHub Release |
+| `deploy/deploy.sh` | `/opt/horeca/bin/deploy.sh` (root, 755) | the forced command of the deploy key: `staging <sha>` = pull → Postgres up (waits) → Meilisearch, Mailpit, Garage up (never waited for) → migrate (one-off) → `up` web + worker → wait ≤ 90 s for `/api/health` 200 → prune images (keep 5 SHAs); `staging-reset <sha>` = the same after `down --volumes` (**deletes all staging data**, Garage's bucket and key included — run the Garage setup again afterwards, see below; the Postgres init script runs only on an empty volume, so this is also how changed DB passwords take effect; no seed entry yet → staging starts empty); `production <sha>` = pull → Postgres up → **pre-deploy `pg_dump`** → the same steps (never a reset; `staging-reset` stays staging-only). Log: `/opt/horeca/<env>/deploy.log`; current SHA: `/opt/horeca/<env>/deployed-sha` |
 | `deploy/compose.yml` + `deploy/postgres/init/` + `deploy/garage/garage.toml` | `/opt/horeca/deploy/` (same relative paths) | one Compose file for both environments; project `horeca-<APP_ENV>` (`horeca-staging` / `horeca-production`); values from `/opt/horeca/<env>/.env`. Services: web, worker, Postgres, Meilisearch, Mailpit, Garage (`dxflrs/garage:v2.5.0`, no ports, 128m, volumes `garage-meta` / `garage-data`); one-offs `migrate` (profile `migrate`) and `media-backup` (`rclone/rclone:1.75.2`, profile `backup`) |
 | `scripts/garage-setup.sh` | `/opt/horeca/bin/garage-setup.sh` (root, 755) | once per environment (and after every `staging-reset`): Garage layout, bucket `horeca-media`, app key with read/write on it — prints `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` **once**; safe to repeat |
-| `deploy/env.staging.example` | template for `/opt/horeca/staging/.env` (deploy, 600) | every key; hosts are the Compose service names |
+| `deploy/env.staging.example`, `deploy/env.production.example` | templates for `/opt/horeca/<env>/.env` (deploy, 600) | every key; hosts are the Compose service names; production: ports 3102 / 8127, `REGISTRATION_OPEN=false`, its own secrets |
 | `deploy/nginx/horeca-upgrade-map.conf.example` | `/etc/nginx/conf.d/horeca-upgrade-map.conf` | WebSocket `map` for `/_mail/`, shared by both sites |
 | `deploy/nginx/horeca-staging.conf.example` | `/etc/nginx/sites-available/horeca-staging` | `listen <SERVER_TAILSCALE_IP>:8081` — the Tailscale address only (shared with production, told apart by `server_name`) → `127.0.0.1:3101`, basic auth, plus the **only** `default_server` on that address:port (unknown Host → 444; the production site uses a plain `listen <SERVER_TAILSCALE_IP>:8081;`), real IP from the friend's proxy, `/_mail/` → Mailpit |
-| `deploy/backup.sh` + `deploy/cron.example` | `/opt/horeca/bin/backup.sh`, `/etc/cron.d/horeca-backup` | nightly `pg_dump` → `/var/backups/horeca/<env>/nightly/` (keep 7) + `rclone copy` of the bucket → `/var/backups/horeca/<env>/media/` (production cron line enabled with D5-A1) |
+| `deploy/nginx/horeca-production.conf.example` | `/etc/nginx/sites-available/horeca-production` | plain `listen <SERVER_TAILSCALE_IP>:8081;` (no `default_server`), `server_name horeca.bogdandelic.online` → `127.0.0.1:3102`, **no** basic auth for the app; `/_mail/` → `127.0.0.1:8127` behind basic auth (`/etc/nginx/htpasswd/horeca-production-mail`) |
+| `deploy/backup.sh` + `deploy/cron.example` | `/opt/horeca/bin/backup.sh`, `/etc/cron.d/horeca-backup` | nightly `pg_dump` → `/var/backups/horeca/<env>/nightly/` (keep 7) + `rclone copy` of the bucket → `/var/backups/horeca/<env>/media/`; the cron line runs it for production at 03:15 |
+| `deploy/restore-test.sh` | `/opt/horeca/bin/restore-test.sh` (root, 755) | restores a dump into a throwaway Postgres (no network, our init script, random passwords) and checks the three logins, grants, RLS policies, the pg-boss schema and every table's row count against the dump |
 | `scripts/smoke-g0.sh` | — | G0 smoke test (bash + curl): health, sign-up, sign-in, `/g0-check`, its Server Action (same Origin → `UNAUTHENTICATED` envelope; foreign Origin → refused), wrong password → 401; prints the manual two-network rate-limit check |
+| `scripts/smoke-production.sh` | — | read-only production smoke test: `/api/health` (degraded = warning), `/login` renders, wrong password → 401; no sign-up, no test data |
+| `scripts/next-version.sh` | — | next release tag from the Conventional Commits since the last tag (see Releases & versioning) |
 
-**⚠️ Drift:** the server does not pull deploy files from Git. When `deploy/compose.yml`, `deploy/postgres/init/`, `deploy/garage/garage.toml`, `deploy.sh`, `backup.sh`, `scripts/garage-setup.sh` or an Nginx example changes, copy it to the server by hand in the same session as the merge (the next deploy uses whatever is on the server).
+**⚠️ Drift:** the server does not pull deploy files from Git. When `deploy/compose.yml`, `deploy/postgres/init/`, `deploy/garage/garage.toml`, `deploy.sh`, `backup.sh`, `restore-test.sh`, `scripts/garage-setup.sh` or an Nginx example changes, copy it to the server by hand in the same session as the merge (the next deploy uses whatever is on the server).
 
 **Memory:** our project gets ≈ 4 GB for staging + production together. Staging defaults (override in `.env`): web 384m, worker 768m, Postgres 384m, Meilisearch 256m, Mailpit 64m, Garage 128m, migrate 256m, media-backup 128m (≈ 2 GB running). **Stop staging when not testing** (`docker compose -p horeca-staging stop`, as `deploy`); production stays up.
 
@@ -327,7 +334,9 @@ Environment **`staging`** (Settings → Environments; deployment branches: `main
 | `DEPLOY_KNOWN_HOSTS` | the server's host-key line for `DEPLOY_HOST` (`ssh-keyscan`, fingerprint checked on the server) |
 | `STAGING_BASIC_AUTH_USER`, `STAGING_BASIC_AUTH_PASS` | the staging Nginx basic-auth login (used by the smoke test) |
 
-GHCR: the image package `horeca-marketplace` is **public** (the server pulls without a login). Production Environment + secrets: D5-A1.
+Environment **`production`** (deployment branches: `main` only; **required reviewers** = both team members — the approval gate; "prevent self-review" off, so either member can approve) with the **same five deploy secrets** as staging: `TS_OAUTH_CLIENT_ID`, `TS_AUDIENCE`, `DEPLOY_HOST`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` (same server, same forced-command key; the federated credential's `environment:*` subject already covers it). No basic-auth secrets: the production smoke test needs none. The `release` job uses only the workflow token (`contents: write`); a tag-protection ruleset on `v*` would have to allow GitHub Actions.
+
+GHCR: the image package `horeca-marketplace` is **public** (the server pulls without a login).
 
 ### One-time server setup (staging)
 Done already: user `deploy` (docker group), `/opt/horeca/{staging,production,bin}`, `/var/backups/horeca`. Then, as an admin user:
@@ -350,6 +359,16 @@ Done already: user `deploy` (docker group), `/opt/horeca/{staging,production,bin
    4. After `staging-reset` (which deletes Garage's volumes) repeat 3 — the key pair is new.
    5. The old `horeca-<env>_media` volume is no longer used; remove it with `docker volume rm` once you have checked it is empty.
 
+### One-time server setup (production)
+Same server, same `deploy` user and key; as an admin user:
+1. Files: `deploy/restore-test.sh` → `/opt/horeca/bin/` (root:root, 755); re-copy `deploy.sh`, `backup.sh` and `compose.yml` (drift rule above). `/opt/horeca/production` owned by `deploy`.
+2. Secrets: `/opt/horeca/production/.env` from `deploy/env.production.example` — **every secret new** (never staging's), placeholder S3 key pair for now; `chown deploy: … && chmod 600`.
+3. Nginx: `deploy/nginx/horeca-production.conf.example` → `/etc/nginx/sites-available/horeca-production` (fill in the two Tailscale IPs, **no** `default_server`) + symlink; `htpasswd -c -B /etc/nginx/htpasswd/horeca-production-mail <user>` (root:www-data, 640); `nginx -t && systemctl reload nginx`.
+4. First deploy (approve it in GitHub). Garage starts but stays unhealthy → health "degraded" (passes).
+5. Garage: run the setup with `horeca-production` / `/opt/horeca/production/` (step 7.3 above), paste the key pair into `.env`, redeploy (re-run `deploy production`) or `up -d --force-recreate web worker` as `deploy`.
+6. Backups: `deploy/cron.example` → `/etc/cron.d/horeca-backup`; run `sudo -u deploy /opt/horeca/bin/backup.sh production` once by hand.
+7. Restore test (once, D5-A1): `sudo -u deploy /opt/horeca/bin/restore-test.sh "$(ls -t /var/backups/horeca/production/pre-deploy/*.dump | head -n1)"` → "all checks passed". The first pre-deploy dump is of an empty database — repeat with the dump of the second deploy (or a nightly one) so there are rows to compare.
+
 ## Server & infrastructure
 | Environment | Where | Data |
 |---|---|---|
@@ -366,7 +385,7 @@ Done already: user `deploy` (docker group), `/opt/horeca/{staging,production,bin
 - **Hardening:** the server has **no public IP** — it is reachable only from its local network and through Tailscale — and **no active host firewall**. So nothing relies on a firewall: every HoReCa port is bound explicitly, containers to `127.0.0.1` and our Nginx to the Tailscale address (`<SERVER_TAILSCALE_IP>:8081`); Postgres and Meilisearch publish no port at all. SSH keys only, no root or password login; automatic OS security updates; the `deploy` user only runs `deploy.sh`.
 - **Other services on the server** (it is shared) are outside this project: their ports, exposure and updates are not managed or covered here.
 - **Health:** Docker healthchecks; `/api/health` = Postgres + migration version (gates deploys); Meilisearch, Garage, Mailpit and the worker reported as degraded (worker: oldest waiting pg-boss job older than 5 min).
-- **Backups:** nightly `pg_dump` of production plus one before every production deploy, and a nightly **object-level copy of the production bucket through the S3 API** (`rclone copy` in the one-off `media-backup` container, `rclone/rclone:1.75.2`, configured only through environment variables → `/var/backups/horeca/production/media/`; restore = copy back through the S3 API), stored on the server; keep 7 nightly + 5 pre-deploy dumps. The media copy uses **`copy`, not `sync`**: an object deleted from the bucket (by a bug or by mistake) stays in the backup — the trade-off is that the backup only grows and keeps objects the app deleted on purpose, which is fine at our size (a few hundred images and PDFs). A restore of a pre-deploy dump into a scratch container is tested once (D5); restored waiting jobs run again, which is harmless with Mailpit. Meilisearch is rebuilt with `pnpm search:reindex`; staging is not backed up.
+- **Backups:** nightly `pg_dump` of production plus one before every production deploy, and a nightly **object-level copy of the production bucket through the S3 API** (`rclone copy` in the one-off `media-backup` container, `rclone/rclone:1.75.2`, configured only through environment variables → `/var/backups/horeca/production/media/`; restore = copy back through the S3 API), stored on the server; keep 7 nightly + 5 pre-deploy dumps. The media copy uses **`copy`, not `sync`**: an object deleted from the bucket (by a bug or by mistake) stays in the backup — the trade-off is that the backup only grows and keeps objects the app deleted on purpose, which is fine at our size (a few hundred images and PDFs). Pre-deploy dumps live in `/var/backups/horeca/production/pre-deploy/` (newest 5), nightly ones in `…/nightly/` (newest 7). **Restore test:** `deploy/restore-test.sh <dump>` restores a dump into a throwaway container (our init script, no network) and checks logins, grants, RLS policies, the pg-boss schema and row counts — run once for D5-A1 and after any change to the init script or the dump command; restored waiting jobs run again, which is harmless with Mailpit. Meilisearch is rebuilt with `pnpm search:reindex`; staging is not backed up.
 - **Database logins:** three roles per environment, created by the Postgres init script — `horeca_owner` (non-superuser owner, migrations), `horeca_app` (web), `horeca_worker` (worker); passwords in the server's `.env` files, never in Git.
 - **Secrets:** runtime secrets in `/opt/horeca/staging/.env` / `/opt/horeca/production/.env` on the server (mode `600`, owned by `deploy`); CI secrets (SSH key, GHCR token if the image package is private) in GitHub Environments, next to the non-sensitive Tailscale federated-identity values `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` (there is no Tailscale client secret).
 - **Monitoring:** pino JSON logs with Docker log rotation; `/api/health`. (Sentry, an uptime monitor and an admin Jobs page are on the "after the project" list.)
