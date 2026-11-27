@@ -59,6 +59,7 @@ export const PERMISSIONS = {
   "csvImport.confirm": supplierSide,
   "csvImport.cancel": supplierSide,
   "csvImport.view": { supplier: "any", platform: "any" },
+  "category.view": everyone,
   "category.create": platformOnly,
   "category.update": platformOnly,
   "category.deactivate": platformOnly,
