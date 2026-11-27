@@ -374,7 +374,7 @@ export const proformaInvoices = pgTable(
     /** Payment reference printed on the invoice (format: verify — Montenegrin "poziv na broj"). */
     paymentReference: text("payment_reference").notNull(),
     status: invoiceStatus("status").notNull().default("issued"),
-    /** Set by the PDF job; NULL until rendered. Media volume, downloaded through an authorised route handler. */
+    /** Set by the PDF job; NULL until rendered. Object key in the media bucket (S3, decision 013), downloaded through an authorised route handler. */
     storageKey: text("storage_key"),
     pdfGeneratedAt: timestamp("pdf_generated_at", { withTimezone: true }),
   },
