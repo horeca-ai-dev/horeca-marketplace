@@ -146,3 +146,46 @@ describe("S3 media storage variables (decision 013)", () => {
     expect(problems("web")).not.toMatch(/MEDIA_DIR/);
   });
 });
+
+describe("mock-services role (D6-A3)", () => {
+  const clean = () => {
+    vi.stubEnv("SKIP_ENV_VALIDATION", "");
+    vi.stubEnv("NEXT_PHASE", "");
+    for (const key of [
+      "DATABASE_URL",
+      "MOCK_SERVICES_PORT",
+      "MOCK_SERVICES_HOST",
+      "MOCK_SUPPLIER_BEHAVIOUR",
+      "MOCK_DEFAULT_STOCK",
+    ])
+      vi.stubEnv(key, "");
+  };
+
+  it("needs only the API key — no database or storage variables", () => {
+    clean();
+    vi.stubEnv("SUPPLIER_API_KEY", "");
+    expect(() => assertEnv("mock-services")).toThrow(
+      /SUPPLIER_API_KEY is not set/,
+    );
+    vi.stubEnv("SUPPLIER_API_KEY", "some-key");
+    expect(() => assertEnv("mock-services")).not.toThrow();
+  });
+
+  it("defaults to 127.0.0.1:4010, an empty behaviour and 100 units", () => {
+    clean();
+    expect(env.MOCK_SERVICES_PORT).toBe(4010);
+    expect(env.MOCK_SERVICES_HOST).toBe("127.0.0.1");
+    expect(env.MOCK_SUPPLIER_BEHAVIOUR).toBe("{}");
+    expect(env.MOCK_DEFAULT_STOCK).toBe(100);
+  });
+
+  it("rejects a port or default stock that is not a whole number in range", () => {
+    clean();
+    vi.stubEnv("SUPPLIER_API_KEY", "some-key");
+    vi.stubEnv("MOCK_SERVICES_PORT", "http");
+    expect(() => assertEnv("mock-services")).toThrow(/MOCK_SERVICES_PORT/);
+    vi.stubEnv("MOCK_SERVICES_PORT", "4010");
+    vi.stubEnv("MOCK_DEFAULT_STOCK", "-1");
+    expect(() => assertEnv("mock-services")).toThrow(/MOCK_DEFAULT_STOCK/);
+  });
+});
