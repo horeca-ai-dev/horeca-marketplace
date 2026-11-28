@@ -1,9 +1,10 @@
-# HoReCa Marketplace — ONE image, several entry points (D2-A4, README → CI/CD):
+# HoReCa Marketplace — ONE image, four entry points (D2-A4, D6-A3, README → CI/CD):
 #
 #   web      node web/server.js       (default CMD) Next.js standalone server on :3000
 #   worker   node dist/worker.mjs     pg-boss worker (jobs, e-mail, later PDFs via Chromium)
 #   migrate  node dist/migrate.mjs    one-shot: Drizzle migrations + pg-boss schema/queues/grants
-#   (mock-services — decision 012 §8 — becomes the fourth entry, dist/mock-services.mjs, in D6-A3)
+#   mock-services  node dist/mock-services.mjs   supplier stock API on :4010 (decision 012 §7–§8; the card
+#                                                gateway joins it in D10-B3); no database, state in memory
 #
 # Built once per commit and promoted unchanged from staging to production, so the build needs NO
 # runtime configuration: SKIP_ENV_VALIDATION=1 in the build stage, and there are no NEXT_PUBLIC_*
@@ -11,8 +12,8 @@
 #
 # Runtime layout:
 #   /app/web           Next.js standalone output (+ .next/static, public) with its own traced node_modules
-#   /app/node_modules  full PRODUCTION dependencies for the bundled worker/migrate entries
-#   /app/dist          worker.mjs, migrate.mjs (esbuild, scripts/build-entries.mjs)
+#   /app/node_modules  full PRODUCTION dependencies for the bundled worker / migrate / mock-services entries
+#   /app/dist          worker.mjs, migrate.mjs, seed.mjs, mock-services.mjs (esbuild, scripts/build-entries.mjs)
 #   /app/migrations    SQL migrations (MIGRATIONS_DIR)
 #   /ms-playwright     Chromium headless shell for the worker (PLAYWRIGHT_BROWSERS_PATH)
 

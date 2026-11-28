@@ -114,6 +114,45 @@ const eslintConfig = defineConfig([
     },
   },
 
+  // mock-services plays EXTERNAL systems (decision 012 §8): it must never read our database or reuse
+  // our domain code. Allowed from src/server: the logger and the pure seed data files.
+  {
+    files: ["src/mock-services.ts", "src/mock-services/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            { name: "pg", message: "mock-services has no database." },
+            { name: "pg-boss", message: "mock-services has no job queue." },
+          ],
+          patterns: [
+            {
+              group: ["drizzle-orm", "drizzle-orm/*"],
+              message: "mock-services has no database.",
+            },
+            {
+              group: [
+                "@/server/db/client",
+                "@/server/db/tx",
+                "@/server/db/schema",
+                "@/server/db/schema/*",
+                "@/server/db/queries/*",
+                "@/server/domain/*",
+                "@/server/jobs/*",
+                "@/server/auth/*",
+                "@/server/storage/*",
+                "@/app/*",
+              ],
+              message:
+                "mock-services is an external system: only @/server/logger and the seed DATA files (@/server/db/seed/*-data) may be imported.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
