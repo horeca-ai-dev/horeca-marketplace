@@ -10,8 +10,8 @@
 #   production  project horeca-production   web 127.0.0.1:3102   Mailpit UI 127.0.0.1:8127
 #   (host ports = WEB_PORT / MAILPIT_UI_PORT in .env; both sites sit behind our Nginx on :8081)
 #
-# Rules (CLAUDE.md → Infrastructure): every ports entry starts with 127.0.0.1; Postgres, Meilisearch
-# and Garage have no ports; mem_limit and log rotation on every container; each container gets ONLY the variables
+# Rules (CLAUDE.md → Infrastructure): every ports entry starts with 127.0.0.1; Postgres, Meilisearch,
+# Garage and mock-services have no ports; mem_limit and log rotation on every container; each container gets ONLY the variables
 # its entry point needs (DATABASE_WORKER_URL → worker only, DATABASE_MIGRATE_URL → migrate only).
 # Image versions are the same exact pins as docker-compose.dev.yml.
 name: horeca-${APP_ENV:?set APP_ENV}
@@ -218,8 +218,36 @@ services:
     mem_limit: 128m
     logging: *logging
 
-  # TODO(D6-A3): mock-services (4th entry of the image) — card gateway + supplier stock API, routed by
-  # our Nginx at /gateway/. Until then PAYMENT_GATEWAY_URL / SUPPLIER_API_URL point at nothing.
+  # The systems OUTSIDE our platform (decision 012 §7–§8), fourth entry of the app image: the supplier
+  # stock API now, the card gateway under /gateway/ from D10-B3. Internal only: NO ports entry — web and
+  # worker reach it as http://mock-services:4010 (SUPPLIER_API_URL). It gets ONLY its own variables: no
+  # database URL, no storage key. State is in memory: every restart (so every deploy) resets the stock.
+  # Nothing depends_on it and deploy.sh does not wait for it.
+  # TODO(D10): the hosted card page needs our Nginx to reach /gateway/ — add
+  # "127.0.0.1:${MOCK_SERVICES_HOST_PORT}:4010" then (not needed for the stock API).
+  mock-services:
+    <<: *app
+    # The heap limit keeps Node inside mem_limit (it would otherwise size its heap by the host's memory).
+    command: ["node", "--max-old-space-size=64", "dist/mock-services.mjs"]
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SUPPLIER_API_KEY: ${SUPPLIER_API_KEY:?set SUPPLIER_API_KEY}
+      MOCK_SERVICES_HOST: 0.0.0.0 # inside the container; reachable on the project network only
+      MOCK_SERVICES_PORT: "4010"
+      # JSON, optional: {"demo-supplier-b":{"mode":"down"}} — see src/mock-services/config.ts.
+      MOCK_SUPPLIER_BEHAVIOUR: ${MOCK_SUPPLIER_BEHAVIOUR:-}
+      MOCK_DEFAULT_STOCK: ${MOCK_DEFAULT_STOCK:-}
+    mem_limit: ${MOCK_SERVICES_MEM_LIMIT:-96m}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4010/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 # Named per project (horeca-staging_garage-data, …): staging and production never share a volume.
 volumes:

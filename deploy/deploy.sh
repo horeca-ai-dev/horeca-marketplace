@@ -5,7 +5,7 @@
 # ~deploy/.ssh/authorized_keys is forced to run it (command="/opt/horeca/bin/deploy.sh",restrict),
 # so the arguments arrive in $SSH_ORIGINAL_COMMAND. Run by hand (as deploy) they come as arguments:
 #
-#   staging <sha>          pull → migrate → up web + worker → wait for /api/health → prune images
+#   staging <sha>          pull → migrate → up web + worker (+ mock-services) → wait for /api/health → prune images
 #   staging-reset <sha>    the same, after `down --volumes`: DELETES all staging data (database,
 #                          search index, Garage with its bucket AND key). The Postgres init script runs
 #                          only on an EMPTY volume, so this is also how changed database passwords take
@@ -95,6 +95,8 @@ fi
 # ── 4. Infrastructure up (on an empty volume Postgres runs the init script now) ─────────────────
 # Only Postgres gates the deploy; Meilisearch, Mailpit and Garage are "degraded" in /api/health, never
 # blocking. Garage is NOT waited for: it stays unhealthy until scripts/garage-setup.sh has run once.
+# mock-services (supplier stock API; app image, so it is recreated with every new SHA and its in-memory
+# stock starts again from the seed data) is started here too and NOT waited for either.
 compose up --detach --wait postgres
 
 # ── 4b. Production: dump the database BEFORE migrations touch it ───────────────────────────────
@@ -127,7 +129,7 @@ if [[ $predeploy_dump == true ]]; then
   find "$dump_dir" -maxdepth 1 -type f -name '*.partial' -delete
 fi
 
-compose up --detach meilisearch mailpit garage
+compose up --detach meilisearch mailpit garage mock-services
 
 # ── 5. Migrations (one-off; exits non-zero on failure → the deploy stops, old app keeps running) ─
 log "migrate"
