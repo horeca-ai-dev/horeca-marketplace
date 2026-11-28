@@ -4,6 +4,7 @@
  *   src/worker.ts  → dist/worker.mjs   (node dist/worker.mjs)
  *   src/migrate.ts → dist/migrate.mjs  (node dist/migrate.mjs)
  *   src/seed.ts    → dist/seed.mjs     (node dist/seed.mjs — one-shot demo data; production needs SEED_DEMO_PASSWORD)
+ *   src/mock-services.ts → dist/mock-services.mjs  (node dist/mock-services.mjs — supplier stock API; no database)
  *
  * Only OUR code is bundled (the `@/…` imports resolve through tsconfig paths). Every npm package stays
  * external and is loaded at runtime from the image's production node_modules — pg-boss, sharp,
@@ -20,6 +21,7 @@ await build({
     worker: "src/worker.ts",
     migrate: "src/migrate.ts",
     seed: "src/seed.ts",
+    "mock-services": "src/mock-services.ts",
   },
   outdir: "dist",
   outExtension: { ".js": ".mjs" },
