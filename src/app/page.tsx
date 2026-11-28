@@ -1,10 +1,11 @@
-import { getTranslations } from "next-intl/server";
+/**
+ * "/" has no content of its own: everyone is sent where they belong (destinationFor) —
+ * not logged in → /login, logged in without a company → /complete-setup, otherwise their area.
+ */
+import { redirect } from "next/navigation";
+import { destinationFor } from "@/lib/auth/destination";
+import { resolveSession } from "@/server/auth/actor";
 
 export default async function Home() {
-  const t = await getTranslations("app");
-  return (
-    <main id="main" className="flex flex-1 items-center justify-center p-8">
-      <h1 className="text-2xl">{t("name")}</h1>
-    </main>
-  );
+  redirect(destinationFor(await resolveSession()));
 }
