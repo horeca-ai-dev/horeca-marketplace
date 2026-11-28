@@ -141,7 +141,7 @@ Whatever is not finished at G4 goes into README → Known limitations. If someth
 - [ ] **D6-B3** (B · 1h) React Email base layout + password-reset e-mail wired to Better Auth (the reset pages are D5-A2; test end to end in Mailpit). *(moved from D2-B4)*
 - [ ] **D6-A1** (A · 1.5h) Supplier "My products" table. *(Admin category management → D14-A3; categories come from the seed until then.)*
 - [ ] **D6-A2** (A · 3h) Product form generated from the attribute schema; FileDropzone + image upload with progress; `srcset` image component.
-- [ ] **D6-A3** (A · 3h) **`mock-services` app** — fourth entry point of the existing image, its own container per environment, state in memory seeded on start from the catalogue data — with the **supplier stock API**: `GET /suppliers/{id}/stock?skus=…`, `POST /suppliers/{id}/orders` (idempotent by sub-order ID; decrements stock, may reject lines); behaviours per supplier: normal · down (503) · some SKUs out of stock (decision 012 §7–§8).
+- [x] **D6-A3** (A · 3h) **`mock-services` app** — fourth entry point of the existing image, its own container per environment, state in memory seeded on start from the catalogue data — with the **supplier stock API**: `GET /suppliers/{id}/stock?skus=…`, `POST /suppliers/{id}/orders` (idempotent by sub-order ID; decrements stock, may reject lines); behaviours per supplier: normal · down (503) · some SKUs out of stock (decision 012 §7–§8).
 - [ ] **D5-A4** (A · 1h) *(moved from D5 — 013)* **Test PDF on staging:** render a one-page PDF with Playwright in the worker container (č ć š ž đ, within `mem_limit`). If it fails, switch to a PDF library now, not on D13.
 - *A ≈ 8.5h (+1h D5-A4; 013), B ≈ 8.5h (D6-B1 +0.5h; 013).*
 
