@@ -34,7 +34,8 @@ pnpm db:seed             # category tree + demo organizations and users (safe to
 pnpm dev                 # web app → http://localhost:3000
 pnpm worker:dev          # pg-boss worker (separate terminal)
 pnpm mock:dev            # mock-services: supplier stock API → http://127.0.0.1:4010 (separate terminal; no database)
-pnpm build:entries       # bundle worker + migrate + seed + mock-services into dist/ (the Docker image runs these)
+pnpm build:entries       # bundle worker + migrate + seed + mock-services + pdf-probe into dist/ (the Docker image runs these)
+node dist/pdf-probe.mjs [out.pdf]   # D5-A4: test PDF from Chromium + our font, one JSON line (after build:entries; on staging: README → "PDF probe")
 docker build -t horeca:local .   # the one image: web (default), worker, migrate, mock-services — see README → CI/CD
 pnpm lint && pnpm typecheck && pnpm test     # before every push
 pnpm format              # Prettier (format:check in CI)

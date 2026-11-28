@@ -201,7 +201,7 @@ Config: `deploy/garage/garage.toml` (no secrets — Garage reads `GARAGE_RPC_SEC
 | One company, two organizations (buyer + supplier) | `multi@demo.local` | `Demo-1234!` |
 
 ## Scripts
-`pnpm dev` · `pnpm worker:dev` · `pnpm mock:dev` (mock-services on `127.0.0.1:4010`) · `pnpm build` · `pnpm build:entries` (bundles worker, migrate, seed and mock-services into `dist/`) · `pnpm start` · `pnpm lint` · `pnpm typecheck` (`next typegen` + `tsc --noEmit`) · `pnpm format` · `pnpm format:check` · `pnpm test` · `pnpm test:integration` · `pnpm test:rls` (RLS tests with psql on a throwaway database; needs the Compose Postgres) · `pnpm test:e2e` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:reset` · `pnpm search:reindex` · `scripts/smoke-g0.sh` (G0 smoke test; env `SMOKE_BASE_URL`, `SMOKE_BASIC_AUTH_USER`/`_PASS`)
+`pnpm dev` · `pnpm worker:dev` · `pnpm mock:dev` (mock-services on `127.0.0.1:4010`) · `pnpm build` · `pnpm build:entries` (bundles worker, migrate, seed, mock-services and the PDF probe into `dist/`) · `pnpm start` · `pnpm lint` · `pnpm typecheck` (`next typegen` + `tsc --noEmit`) · `pnpm format` · `pnpm format:check` · `pnpm test` · `pnpm test:integration` · `pnpm test:rls` (RLS tests with psql on a throwaway database; needs the Compose Postgres) · `pnpm test:e2e` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:reset` · `pnpm search:reindex` · `scripts/smoke-g0.sh` (G0 smoke test; env `SMOKE_BASE_URL`, `SMOKE_BASIC_AUTH_USER`/`_PASS`)
 
 ## Project structure
 ```
@@ -288,7 +288,7 @@ flowchart LR
   | migrate | `node dist/migrate.mjs` | one-shot, `DATABASE_MIGRATE_URL` only; exits non-zero on failure |
   | mock-services | `node dist/mock-services.mjs` | listens on `:4010`; supplier stock API (the card gateway under `/gateway/` arrives with D10-B3); needs only `SUPPLIER_API_KEY` — **no database**, state in memory |
 
-  (`node dist/seed.mjs` is a one-shot tool in the same image, not a service.)
+  (`node dist/seed.mjs` and `node dist/pdf-probe.mjs` are one-shot tools in the same image, not services — the second is the Chromium check below, "PDF probe".)
 
   No media volume: media lives in the environment's Garage, reached over the S3 API (decision 013). The image has no `curl`: a Compose healthcheck uses `node -e "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"`. Run containers with `init: true` so signals reach Node.
   `--build-arg INSTALL_CHROMIUM=0` skips the Chromium download (fonts stay) for local builds on a network that blocks `storage.googleapis.com` — that image cannot render PDFs; CI and the release image always use the default `1`.
@@ -399,6 +399,34 @@ Same server, same `deploy` user and key; as an admin user:
 5. Garage: run the setup with `horeca-production` / `/opt/horeca/production/` (step 7.3 above), paste the key pair into `.env`, redeploy (re-run `deploy production`) or `up -d --force-recreate web worker` as `deploy`.
 6. Backups: `deploy/cron.example` → `/etc/cron.d/horeca-backup`; run `sudo -u deploy /opt/horeca/bin/backup.sh production` once by hand.
 7. Restore test (once, D5-A1): `sudo -u deploy /opt/horeca/bin/restore-test.sh "$(ls -t /var/backups/horeca/production/pre-deploy/*.dump | head -n1)"` → "all checks passed". The first pre-deploy dump is of an empty database — repeat with the dump of the second deploy (or a nightly one) so there are rows to compare.
+
+### PDF probe (D5-A4) — can this image render our invoices?
+`dist/pdf-probe.mjs` is a by-hand check, not a job: it starts the image's Chromium (Playwright's headless shell), renders a one-page A4 pro-forma sample — Schibsted Grotesk from our own files (inlined into the bundle as base64, so nothing is read from disk or the network; every request is blocked), `č ć š ž đ Č Ć Š Ž Đ`, amounts like `1.234,56 €`, the DESIGN.md colours — writes the PDF to `/tmp/horeca-pdf-probe.pdf` **inside the container** and prints **one JSON line**. It reads no configuration and touches neither the database nor Garage. Exit code 0 only if the PDF has one page and our font is embedded.
+
+Run it **inside the running staging worker** (`exec`, not `run`), so the worker's own memory counts against `mem_limit` exactly as it will for the real invoice job (D13). On the server, as `deploy`:
+```bash
+docker compose -p horeca-staging exec -T worker node dist/pdf-probe.mjs
+docker cp "$(docker compose -p horeca-staging ps -q worker)":/tmp/horeca-pdf-probe.pdf /tmp/horeca-pdf-probe.pdf
+docker stats --no-stream "$(docker compose -p horeca-staging ps -q worker)"
+```
+Then copy `/tmp/horeca-pdf-probe.pdf` from the server to your machine (`scp`, over Tailscale) and **open it**: the diacritics, the typeface and the right-aligned amount columns are checked by eye.
+
+Reading the JSON line:
+
+| Field | Meaning |
+|---|---|
+| `ok`, `pages`, `fontEmbedded`, `fonts` | one page, and Schibsted Grotesk is inside the PDF. `fonts` naming DejaVu or Liberation instead means the fallback was used — a failure |
+| `sizeBytes`, `durationMs`, `launchMs` | PDF size; whole run and the Chromium start alone |
+| `memory.cgroupPeakBytes` / `cgroupLimitBytes` | **the numbers that decide:** the container's highest memory during the run (worker + probe + Chromium, sampled every 25 ms) against its `mem_limit` (768m = 805306368) |
+| `memory.cgroupPeakSinceStartBytes` | the kernel's own high-water mark since the container started (exact, but not only this run) |
+| `memory.chromiumRssPeakBytes`, `nodeRssPeakBytes` | per-process view; the Chromium sum counts shared pages several times, so it overstates |
+| `blockedRequests`, `fontFacesLoaded` | should be `0` and `2` |
+
+`docker stats` refreshes about once a second and the run takes about as long, so it shows the worker's level before / after rather than the peak — trust `cgroupPeakBytes`. If the container goes over the limit, the kernel kills a process in it (possibly the worker itself, which Docker then restarts): that is the signal to raise `WORKER_MEM_LIMIT` or switch to a PDF library **now**, not on D13.
+
+Locally: `pnpm build:entries && node dist/pdf-probe.mjs ./probe.pdf` (needs `pnpm exec playwright install --only-shell chromium` once; `tsx src/pdf-probe.ts` does not work — the fonts are inlined by esbuild). The memory fields that come from the container are `null` outside one.
+
+**Finding (28.11.2026, local run, Chromium 158):** our font is a *variable* font, and Chromium writes it into the PDF as **Type 3** fonts (each glyph as a drawing procedure) rather than as an embedded TrueType file. The text stays selectable and searchable and the file is self-contained, but some viewers render Type 3 text slightly less crisply on screen. If that shows in the staging PDF, D13-A1 should embed static instances (400 / 500 / 600 / 700) for the invoice instead.
 
 ## Server & infrastructure
 | Environment | Where | Data |
