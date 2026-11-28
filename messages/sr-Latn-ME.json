@@ -320,7 +320,8 @@
       "columns": {
         "label": "Naziv",
         "address": "Adresa",
-        "contact": "Kontakt"
+        "contact": "Kontakt",
+        "status": "Status"
       },
       "badge": {
         "default": "Podrazumijevana",
@@ -347,7 +348,8 @@
       "archiveConfirm": "Arhivirajte lokaciju",
       "archiving": "Arhiviramo…",
       "cancel": "Odustanite",
-      "archived": "Lokacija „{label}” je arhivirana."
+      "archived": "Lokacija „{label}” je arhivirana.",
+      "archivedNote": "Arhivirana lokacija se ne može mijenjati. Ako je ponovo trebate, dodajte je kao novu lokaciju."
     },
     "bank": {
       "heading": "Bankovni podaci",
