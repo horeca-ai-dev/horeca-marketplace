@@ -106,7 +106,7 @@ Consequence: any environment-specific value in a `NEXT_PUBLIC_*` variable (API U
 ### Enforcement
 - ESLint `no-restricted-properties`: bans `process.env` outside `src/env.core.ts`.
 - ESLint/CI check: bans `NEXT_PUBLIC_` except an explicit allowlist.
-- `assertEnv("web" | "worker" | "migrate")` validates every variable an entry point needs at startup (web: `src/instrumentation.ts`) — the container refuses to boot with a missing or malformed variable and lists all problems at once (names only, never values), so the health check fails before traffic is switched. `SKIP_ENV_VALIDATION=1` (Docker build stage) and `next build` skip it.
+- `assertEnv("web" | "worker" | "migrate" | "seed" | "mock-services")` validates every variable an entry point needs at startup (web: `src/instrumentation.ts`) — the container refuses to boot with a missing or malformed variable and lists all problems at once (names only, never values), so the health check fails before traffic is switched. `SKIP_ENV_VALIDATION=1` (Docker build stage) and `next build` skip it.
 
 ## Getting started
 **Prerequisites:** Node.js 26 (`.nvmrc`), pnpm (the version pinned in `package.json` → `packageManager`), Docker + Docker Compose, Git.
@@ -120,10 +120,37 @@ pnpm db:migrate
 pnpm db:seed
 pnpm dev                       # http://localhost:3000
 pnpm worker:dev                # second terminal
+pnpm mock:dev                  # third terminal: mock-services (supplier stock API) → http://127.0.0.1:4010
 ```
 Local mail: Mailpit UI at `http://localhost:8025`. Local media files: the Garage bucket `horeca-media` (S3 API at `http://127.0.0.1:3900`). **The web app and the worker refuse to start without the `S3_*` variables**: after `scripts/garage-setup.sh` paste the `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` pair it prints into your local `.env` (it is shown only once; `docker compose exec garage /garage key info --show-secret horeca-app` shows it again).*
 
 **Database logins:** on first start, `deploy/postgres/init/01-roles.sh` creates `horeca_owner` (owns the `horeca` database, runs migrations), `horeca_app` and `horeca_worker` from the `POSTGRES_*_PASSWORD` values in `.env`. The script runs **only on an empty data volume**. If you change those passwords, or want a clean database, reset the volumes with `docker compose -f docker-compose.dev.yml down -v`, which deletes all local data. All ports are bound to `127.0.0.1`.
+
+### Local mock-services (supplier stock API)
+`mock-services` plays the systems **outside** our platform ([decision 012 §6–§8](docs/decisions/012-purchase-modes-payments-stock.md)): today the suppliers' stock systems, from D10 also the card gateway (`/gateway/`, not built yet). It never reads our database; its state is **in memory**, loaded on start from `src/server/db/seed/stock-data.ts`, and **reset by every restart** (so by every deploy).
+
+```bash
+pnpm mock:dev                  # the normal way, on every OS → http://127.0.0.1:4010 (restarts on file changes)
+```
+Optional, Linux / macOS: the bundled entry in a container, as on the server — `pnpm build:entries && docker compose -f docker-compose.dev.yml --profile mock up -d mock-services`. It is behind a Compose profile, so a plain `up -d` never starts it. **Windows:** use `pnpm mock:dev` — the container mounts `node_modules`, and pnpm's links may not resolve through a Windows bind mount. Never run both: they share port 4010.
+
+| Request | Answer |
+|---|---|
+| `GET /health` | `200 {"status":"ok"}` — no key (container healthcheck) |
+| `GET /suppliers/{code}/stock?skus=a,b,c` | `200 [{ sku, available, updatedAt }]` (1–200 SKUs) |
+| `POST /suppliers/{code}/orders` with `{ subOrderId, lines: [{ sku, qty }] }` | `200 { subOrderId, status: "accepted" \| "rejected", lines: [{ sku, qty, status: "ok" \| "rejected", reason?, available? }] }` |
+
+- **`{code}` is the supplier's external code = its organization slug** (`demo-supplier-a`, `demo-supplier-b`, `demo-supplier-c`, `demo-multi-supplier`). Organization ids are random per database, so an external system cannot know them; the slug is the same everywhere.
+- **Key:** `Authorization: Bearer $SUPPLIER_API_KEY` on every `/suppliers/…` request (compared in constant time); otherwise `401`.
+- **Orders are all-or-nothing and idempotent by `subOrderId`** (per supplier): one line with too little stock rejects the whole order (reason `insufficient_stock` per line) and nothing is decremented; repeating the same request returns the same answer without a second decrement; the same `subOrderId` with different lines is `409`. A **rejection is `200`** (the supplier's business answer) — non-2xx means "no answer": `401`, `409`, `422` invalid input, `503` supplier down.
+- **Unknown SKUs / suppliers** (a product created by hand or by CSV import, a supplier created by the admin) answer `MOCK_DEFAULT_STOCK` (100), so they can be ordered.
+- **Behaviours** per supplier through `MOCK_SUPPLIER_BEHAVIOUR` (JSON in single quotes in `.env`; restart to apply): `{"mode":"down"}` → `503` on everything for that supplier · `{"mode":"out_of_stock","skus":["HT-3001"]}` → those SKUs are 0 · not listed → normal.
+
+```bash
+curl -s -H "Authorization: Bearer $SUPPLIER_API_KEY" "http://127.0.0.1:4010/suppliers/demo-supplier-a/stock?skus=GO-1001,GO-1006"
+curl -s -H "Authorization: Bearer $SUPPLIER_API_KEY" -H "Content-Type: application/json" \
+  -d '{"subOrderId":"test-1","lines":[{"sku":"GO-1001","qty":1}]}' http://127.0.0.1:4010/suppliers/demo-supplier-a/orders
+```
 
 ### Local S3 (Garage)
 Media (product images, invoice PDFs) lives in S3-compatible object storage — a single-node **Garage** container ([decision 013](docs/decisions/013-s3-compatible-storage-garage.md)). The app talks to it only through the S3 API in `src/server/storage`; only the S3 port `127.0.0.1:3900` is published (RPC and admin API stay inside the Compose network).
@@ -154,8 +181,10 @@ Config: `deploy/garage/garage.toml` (no secrets — Garage reads `GARAGE_RPC_SEC
 | `PAYMENT_GATEWAY_URL` | Base URL of the mock gateway (`mock-services`) as seen from web and worker |
 | `PAYMENT_GATEWAY_API_KEY` | API key our app sends to the gateway |
 | `PAYMENT_WEBHOOK_SECRET` | HMAC-SHA256 secret for verifying payment callbacks (shared with `mock-services`; different per environment) |
-| `SUPPLIER_API_URL` | Base URL of the supplier stock API (`mock-services`; the supplier ID is in the path) as seen from web and worker |
-| `SUPPLIER_API_KEY` | API key our app sends to the supplier stock API |
+| `SUPPLIER_API_URL` | Base URL of the supplier stock API (`mock-services`) as seen from web and worker: `http://127.0.0.1:4010` locally, `http://mock-services:4010` on the server. The supplier's **external code** (= its organization slug, e.g. `demo-supplier-a`) is in the path |
+| `SUPPLIER_API_KEY` | API key our app sends to the supplier stock API (`Authorization: Bearer …`); `mock-services` checks the same value. Different per environment |
+| `MOCK_SUPPLIER_BEHAVIOUR`, `MOCK_DEFAULT_STOCK` | **`mock-services` only**, optional. Behaviour per supplier as JSON (`normal` · `down` · `out_of_stock`) and the quantity of a SKU outside the seed data (default 100) — see "Local mock-services" |
+| `MOCK_SERVICES_HOST`, `MOCK_SERVICES_PORT` | **`mock-services` only.** Defaults `127.0.0.1` / `4010`; the containers set `0.0.0.0` (never set them in `.env`) |
 | `AI_ENABLED` | `false` by default; `true` only for testing and the demo (stretch S3/S4) |
 | `APP_ENV` | `local` / `staging` / `production` — staging banner (runtime, never `NEXT_PUBLIC_*`) |
 | `LOG_LEVEL` | pino log level (`fatal` … `trace`). Logs are JSON lines on stdout in every environment — in `src/server/logger.ts` use `getLogger("component")` and log errors as `{ err }` (secrets are redacted, query parameter values never appear). Readable locally: `… \| pnpm dlx pino-pretty` |
@@ -172,7 +201,7 @@ Config: `deploy/garage/garage.toml` (no secrets — Garage reads `GARAGE_RPC_SEC
 | One company, two organizations (buyer + supplier) | `multi@demo.local` | `Demo-1234!` |
 
 ## Scripts
-`pnpm dev` · `pnpm worker:dev` · `pnpm build` · `pnpm build:entries` (bundles worker, migrate and seed into `dist/`) · `pnpm start` · `pnpm lint` · `pnpm typecheck` (`next typegen` + `tsc --noEmit`) · `pnpm format` · `pnpm format:check` · `pnpm test` · `pnpm test:integration` · `pnpm test:rls` (RLS tests with psql on a throwaway database; needs the Compose Postgres) · `pnpm test:e2e` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:reset` · `pnpm search:reindex` · `scripts/smoke-g0.sh` (G0 smoke test; env `SMOKE_BASE_URL`, `SMOKE_BASIC_AUTH_USER`/`_PASS`)
+`pnpm dev` · `pnpm worker:dev` · `pnpm mock:dev` (mock-services on `127.0.0.1:4010`) · `pnpm build` · `pnpm build:entries` (bundles worker, migrate, seed and mock-services into `dist/`) · `pnpm start` · `pnpm lint` · `pnpm typecheck` (`next typegen` + `tsc --noEmit`) · `pnpm format` · `pnpm format:check` · `pnpm test` · `pnpm test:integration` · `pnpm test:rls` (RLS tests with psql on a throwaway database; needs the Compose Postgres) · `pnpm test:e2e` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:reset` · `pnpm search:reindex` · `scripts/smoke-g0.sh` (G0 smoke test; env `SMOKE_BASE_URL`, `SMOKE_BASIC_AUTH_USER`/`_PASS`)
 
 ## Project structure
 ```
@@ -250,13 +279,16 @@ flowchart LR
   PROD -->|unhealthy| RB[Manual: redeploy previous SHA]
 ```
 - **PR checks** run in parallel on GitHub runners (target < 10 min); a new push cancels the stale run. *Migration check* = `drizzle-kit check` + applying all migrations to an empty database; *RLS SQL tests* = `rls_tests.sql` via `psql`.
-- **Image:** multi-stage `Dockerfile`, Next.js `output: 'standalone'`, one image with four entry points (mock-services arrives with D6-A3). It runs as the non-root `node` user; the build needs no runtime variables (`SKIP_ENV_VALIDATION=1` in the build stage).
+- **Image:** multi-stage `Dockerfile`, Next.js `output: 'standalone'`, one image with four entry points. It runs as the non-root `node` user; the build needs no runtime variables (`SKIP_ENV_VALIDATION=1` in the build stage).
 
   | Entry | Command | Notes |
   |---|---|---|
   | web | `node web/server.js` (default) | listens on `:3000`; needs the web variables (`assertEnv("web")`) |
   | worker | `node dist/worker.mjs` | needs `DATABASE_WORKER_URL`, `SMTP_URL`, …; Chromium headless shell for PDFs |
   | migrate | `node dist/migrate.mjs` | one-shot, `DATABASE_MIGRATE_URL` only; exits non-zero on failure |
+  | mock-services | `node dist/mock-services.mjs` | listens on `:4010`; supplier stock API (the card gateway under `/gateway/` arrives with D10-B3); needs only `SUPPLIER_API_KEY` — **no database**, state in memory |
+
+  (`node dist/seed.mjs` is a one-shot tool in the same image, not a service.)
 
   No media volume: media lives in the environment's Garage, reached over the S3 API (decision 013). The image has no `curl`: a Compose healthcheck uses `node -e "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"`. Run containers with `init: true` so signals reach Node.
   `--build-arg INSTALL_CHROMIUM=0` skips the Chromium download (fonts stay) for local builds on a network that blocks `storage.googleapis.com` — that image cannot render PDFs; CI and the release image always use the default `1`.
@@ -301,7 +333,7 @@ flowchart LR
 | File | Installed on the server as | What it does |
 |---|---|---|
 | `.github/workflows/deploy.yml` | — | push to `main` → build + push `ghcr.io/horeca-ai-dev/horeca-marketplace:<sha>` → join the tailnet → `ssh deploy@… "staging <sha>"` → `scripts/smoke-g0.sh` → **approval** (Environment `production`) → `ssh deploy@… "production <sha>"` → `scripts/smoke-production.sh` → `scripts/next-version.sh` → tag + GitHub Release |
-| `deploy/deploy.sh` | `/opt/horeca/bin/deploy.sh` (root, 755) | the forced command of the deploy key: `staging <sha>` = pull → Postgres up (waits) → Meilisearch, Mailpit, Garage up (never waited for) → migrate (one-off) → `up` web + worker → wait ≤ 90 s for `/api/health` 200 → prune images (keep 5 SHAs); `staging-reset <sha>` = the same after `down --volumes` (**deletes all staging data**, Garage's bucket and key included — run the Garage setup again afterwards, see below; the Postgres init script runs only on an empty volume, so this is also how changed DB passwords take effect; no seed entry yet → staging starts empty); `production <sha>` = pull → Postgres up → **pre-deploy `pg_dump`** → the same steps (never a reset; `staging-reset` stays staging-only). Log: `/opt/horeca/<env>/deploy.log`; current SHA: `/opt/horeca/<env>/deployed-sha` |
+| `deploy/deploy.sh` | `/opt/horeca/bin/deploy.sh` (root, 755) | the forced command of the deploy key: `staging <sha>` = pull → Postgres up (waits) → Meilisearch, Mailpit, Garage, mock-services up (never waited for) → migrate (one-off) → `up` web + worker → wait ≤ 90 s for `/api/health` 200 → prune images (keep 5 SHAs); `staging-reset <sha>` = the same after `down --volumes` (**deletes all staging data**, Garage's bucket and key included — run the Garage setup again afterwards, see below; the Postgres init script runs only on an empty volume, so this is also how changed DB passwords take effect; no seed entry yet → staging starts empty); `production <sha>` = pull → Postgres up → **pre-deploy `pg_dump`** → the same steps (never a reset; `staging-reset` stays staging-only). Log: `/opt/horeca/<env>/deploy.log`; current SHA: `/opt/horeca/<env>/deployed-sha` |
 | `deploy/compose.yml` + `deploy/postgres/init/` + `deploy/garage/garage.toml` | `/opt/horeca/deploy/` (same relative paths) | one Compose file for both environments; project `horeca-<APP_ENV>` (`horeca-staging` / `horeca-production`); values from `/opt/horeca/<env>/.env`. Services: web, worker, Postgres, Meilisearch, Mailpit, Garage (`dxflrs/garage:v2.5.0`, no ports, 128m, volumes `garage-meta` / `garage-data`); one-offs `migrate` (profile `migrate`) and `media-backup` (`rclone/rclone:1.75.2`, profile `backup`) |
 | `scripts/garage-setup.sh` | `/opt/horeca/bin/garage-setup.sh` (root, 755) | once per environment (and after every `staging-reset`): Garage layout, bucket `horeca-media`, app key with read/write on it — prints `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` **once**; safe to repeat |
 | `deploy/env.staging.example`, `deploy/env.production.example` | templates for `/opt/horeca/<env>/.env` (deploy, 600) | every key; hosts are the Compose service names; production: ports 3102 / 8127, `REGISTRATION_OPEN=false`, its own secrets |
@@ -377,6 +409,7 @@ Same server, same `deploy` user and key; as an admin user:
 | Production | Server, Compose project `horeca-production` | Real |
 
 - **Isolation:** staging and production have separate Compose projects, networks, volumes, `.env` files and Garage instances (each with its own bucket and key), plus `mem_limit` on every container. Each runs web, worker, mock-services, Postgres (with the job queue), Meilisearch, Garage and Mailpit.
+- **mock-services (from D6):** one container per environment (app image, `node dist/mock-services.mjs`, ≈ 96m), **internal only** — no `ports:` entry; web and worker reach it as `http://mock-services:4010`. It gets only `SUPPLIER_API_KEY` and its `MOCK_*` settings (no database URL, no storage key). Started by `deploy.sh` on every deploy and never waited for; its in-memory stock restarts from the seed data each time. The card gateway (D10) will need a `127.0.0.1` port for our Nginx (`/gateway/`).
 - **Media storage (decision 013; on the server from D5):** one single-node Garage container per environment (≈ 128m, volumes for data + metadata), **internal only** — no `ports:` entry, nothing for the public proxy, Tailscale or Nginx; web and worker reach it by service name over the S3 API, and images / PDFs reach browsers only through our media and download route handlers (login required, `Cache-Control: private`). Set up once per environment with `scripts/garage-setup.sh`. Our Nginx routes `/gateway/` to `mock-services`; the gateway's admin page is behind basic auth in every environment. The Mailpit UI is served by our Nginx at `/_mail/` behind basic auth (shown on screen in the demo — no SSH tunnel needed).
 - **Domains & traffic:** `horeca.bogdandelic.online` (production) and `staging.horeca.bogdandelic.online` — A records at Namecheap pointing to the friend's public server, which terminates TLS (certbot) and forwards over **Tailscale** to our server (`proxy_pass http://<SERVER_TAILSCALE_IP>:8081` for both domains). It must pass `X-Forwarded-For`, `X-Forwarded-Proto: https` and the host, allow ≈ 20 MB uploads and slightly longer timeouts.
 - **Our Nginx (on the server, listening on the Tailscale address only, port `8081`):** one site per environment on the same address:port, told apart by `server_name` → `127.0.0.1:3102` (prod) / `127.0.0.1:3101` (staging) — host ports 3000/3001 are taken on the server; `auth_basic` on staging; `set_real_ip_from` = friend's Tailscale IP; `X-Forwarded-Proto` passed through unchanged; `client_max_body_size` ≈ 20 MB.
