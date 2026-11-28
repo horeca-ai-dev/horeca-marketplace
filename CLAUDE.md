@@ -33,8 +33,9 @@ pnpm auth:generate       # regenerate the Better Auth tables after changing its 
 pnpm db:seed             # category tree + demo organizations and users (safe to repeat); production needs a real SEED_DEMO_PASSWORD
 pnpm dev                 # web app → http://localhost:3000
 pnpm worker:dev          # pg-boss worker (separate terminal)
-pnpm build:entries       # bundle worker + migrate + seed into dist/ (the Docker image runs these)
-docker build -t horeca:local .   # the one image: web (default), worker, migrate — see README → CI/CD
+pnpm mock:dev            # mock-services: supplier stock API → http://127.0.0.1:4010 (separate terminal; no database)
+pnpm build:entries       # bundle worker + migrate + seed + mock-services into dist/ (the Docker image runs these)
+docker build -t horeca:local .   # the one image: web (default), worker, migrate, mock-services — see README → CI/CD
 pnpm lint && pnpm typecheck && pnpm test     # before every push
 pnpm format              # Prettier (format:check in CI)
 pnpm test:integration    # Testcontainers: needs Docker running; starts its own Postgres (your dev database is not touched); Mailpit from Compose
@@ -65,6 +66,7 @@ src/
   env.core.ts       # the ONLY place that reads process.env (Zod, assertEnv); plain-Node code imports this
   env.ts            # server-only re-export of env.core — Next.js code (src/app, src/components) imports this
   worker.ts         # worker entry point
+  mock-services.ts  # mock-services entry point; its code in src/mock-services/ (external system: never imports db / domain)
 messages/           # next-intl catalogues: sr-Latn-ME.json (complete), en.json (prepared, empty)
 ```
 
