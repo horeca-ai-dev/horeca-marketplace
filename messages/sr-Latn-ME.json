@@ -286,5 +286,104 @@
     "previous": "Prethodna",
     "next": "Sljedeća",
     "closePanel": "Zatvorite detalje"
+  },
+  "company": {
+    "description": {
+      "buyer": "Podaci Vaše firme i lokacije na koje Vam dobavljači isporučuju robu.",
+      "supplier": "Podaci Vaše firme i račun na koji Vam platforma isplaćuje potraživanja."
+    },
+    "profile": {
+      "heading": "Podaci o firmi",
+      "edit": "Uredite podatke",
+      "cancel": "Odustanite",
+      "submit": "Sačuvajte izmjene",
+      "submitting": "Čuvamo…",
+      "saved": "Podaci o firmi su sačuvani.",
+      "ownerOnly": "Podatke o firmi mijenja samo vlasnik naloga firme.",
+      "taxIdNote": "PIB mijenja samo administrator platforme.",
+      "notEntered": "Nije uneseno",
+      "fields": {
+        "address": "Adresa",
+        "vatNumber": "PDV broj",
+        "vatNumberOptional": "PDV broj (opciono)",
+        "contactPhone": "Kontakt telefon"
+      }
+    },
+    "locations": {
+      "heading": "Lokacije za isporuku",
+      "add": "Dodajte lokaciju",
+      "addTitle": "Nova lokacija za isporuku",
+      "editTitle": "Uredite lokaciju",
+      "showArchived": "Prikažite arhivirane",
+      "hideArchived": "Sakrijte arhivirane",
+      "empty": "Još nemate lokacija za isporuku. Prva lokacija koju dodate biće podrazumijevana pri naručivanju.",
+      "columns": {
+        "label": "Naziv",
+        "address": "Adresa",
+        "contact": "Kontakt"
+      },
+      "badge": {
+        "default": "Podrazumijevana",
+        "archived": "Arhivirana"
+      },
+      "fields": {
+        "label": "Naziv lokacije",
+        "labelHelp": "Na primjer „Kuhinja” ili „Magacin”.",
+        "contactName": "Kontakt osoba (opciono)",
+        "contactPhone": "Kontakt telefon (opciono)",
+        "makeDefault": "Postavite kao podrazumijevanu lokaciju",
+        "isDefault": "Ovo je podrazumijevana lokacija. Da biste je promijenili, postavite drugu lokaciju kao podrazumijevanu."
+      },
+      "submit": "Sačuvajte lokaciju",
+      "submitting": "Čuvamo…",
+      "created": "Lokacija „{label}” je dodata.",
+      "updated": "Lokacija „{label}” je sačuvana.",
+      "editAction": "Uredite",
+      "makeDefault": "Postavite kao podrazumijevanu",
+      "madeDefault": "„{label}” je sada podrazumijevana lokacija.",
+      "archive": "Arhivirajte",
+      "archiveTitle": "Arhivirati lokaciju „{label}”?",
+      "archiveDescription": "Arhivirana lokacija se više ne nudi pri naručivanju. Postojeće porudžbine zadržavaju adresu na koju su naručene.",
+      "archiveConfirm": "Arhivirajte lokaciju",
+      "archiving": "Arhiviramo…",
+      "cancel": "Odustanite",
+      "archived": "Lokacija „{label}” je arhivirana."
+    },
+    "bank": {
+      "heading": "Bankovni podaci",
+      "description": "Na ovaj račun platforma isplaćuje Vaša potraživanja za porudžbine plaćene karticom.",
+      "iban": "IBAN",
+      "ibanHelp": "Crnogorski IBAN: ME i 20 cifara. Razmake možete unijeti.",
+      "none": "IBAN još nije unesen.",
+      "edit": "Promijenite IBAN",
+      "add": "Unesite IBAN",
+      "submit": "Sačuvajte IBAN",
+      "submitting": "Čuvamo…",
+      "cancel": "Odustanite",
+      "saved": "IBAN je sačuvan.",
+      "ownerOnly": "Samo vlasnik firme može vidjeti bankovne podatke."
+    },
+    "errors": {
+      "form": {
+        "validation": "Provjerite označena polja.",
+        "ownerOnly": "Ovu izmjenu može napraviti samo vlasnik naloga firme.",
+        "notFound": "Ovi podaci više ne postoje. Osvježite stranicu.",
+        "generic": "Nešto nije u redu. Pokušajte ponovo."
+      },
+      "vatNumber": {
+        "invalid": "PDV broj može imati najviše 50 znakova."
+      },
+      "label": {
+        "required": "Unesite naziv lokacije.",
+        "invalid": "Naziv lokacije može imati najviše 100 znakova."
+      },
+      "contactName": {
+        "invalid": "Ime kontakt osobe može imati najviše 100 znakova."
+      },
+      "iban": {
+        "required": "Unesite IBAN.",
+        "invalid": "IBAN nije ispravan: unesite crnogorski IBAN (ME i 20 cifara) sa ispravnim kontrolnim brojem."
+      }
+    }
   }
 }
