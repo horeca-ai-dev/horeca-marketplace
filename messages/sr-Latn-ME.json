@@ -15,7 +15,12 @@
     "logout": "Odjavite se",
     "loggingOut": "Odjavljujemo Vas…",
     "home": "{appName} — početna stranica",
-    "logoutFailed": "Odjava nije uspjela. Pokušajte ponovo."
+    "logoutFailed": "Odjava nije uspjela. Pokušajte ponovo.",
+    "switchOrganization": "Promijenite firmu",
+    "yourOrganizations": "Vaše firme",
+    "activeOrganization": "(aktivna)",
+    "switchingOrganization": "Mijenjamo firmu…",
+    "switchOrganizationFailed": "Promjena firme nije uspjela. I dalje radite u ime firme koja je bila aktivna. Osvježite stranicu i pokušajte ponovo."
   },
   "orgType": {
     "buyer": "Kupac",

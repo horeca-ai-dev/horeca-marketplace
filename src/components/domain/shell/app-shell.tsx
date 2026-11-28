@@ -8,13 +8,14 @@
  * Below `md` (buyer) / `lg` (supplier, admin) the navigation moves into a sheet opened from the header.
  *
  * A Server Component that reads nothing: no session, no database — the area layout passes the company
- * name. Who may enter an area is decided by the layout's route guard (requireArea, D5-A2) and, for
+ * name and the user's organizations (for the organization switcher). Who may enter an area is decided by the layout's route guard (requireArea, D5-A2) and, for
  * every action, by the domain layer.
  */
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { cn } from "@/lib/utils";
+import type { MyOrganization } from "@/server/domain/my-organizations";
 import { MobileNav } from "./mobile-nav";
 import { type Area, AREAS } from "./nav";
 import { NavList } from "./nav-list";
@@ -24,11 +25,14 @@ import { UserMenu } from "./user-menu";
 export async function AppShell({
   area,
   orgName,
+  organizations,
   children,
 }: {
   area: Area;
   /** The active organization's legal name (from resolveSession). */
   orgName: string;
+  /** Every organization of the user (listMyOrganizations); two or more show the switcher. */
+  organizations: MyOrganization[];
   children: ReactNode;
 }) {
   const t = await getTranslations();
@@ -66,7 +70,11 @@ export async function AppShell({
             </nav>
           )}
           <div className="ml-auto flex min-w-0 items-center gap-3">
-            <OrgSlot area={area} orgName={orgName} />
+            <OrgSlot
+              area={area}
+              orgName={orgName}
+              organizations={organizations}
+            />
             <UserMenu area={area} />
           </div>
         </div>

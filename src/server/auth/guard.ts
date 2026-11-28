@@ -8,11 +8,19 @@
  * A layout is not re-rendered on client-side navigation inside its own area: the guard runs on the
  * first request into an area and on every full page load. That is enough because it only decides the
  * shell — pages and actions authorize through resolveActor() and the domain policy (rule 6).
+ *
+ * requireShell() is requireArea() for the LAYOUTS: it also reads the user's organizations for the
+ * organization switcher in the header (D7-A3). Pages keep calling requireArea().
  */
 import "server-only";
 import { notFound, redirect } from "next/navigation";
 import { guardArea } from "@/lib/auth/area-guard";
 import type { Area } from "@/lib/auth/destination";
+import { withTx } from "@/server/db/tx";
+import {
+  listMyOrganizations,
+  type MyOrganization,
+} from "@/server/domain/my-organizations";
 import { resolveSession, type SessionState } from "./actor";
 
 export async function requireArea(
@@ -23,4 +31,16 @@ export async function requireArea(
   if (decision.kind === "redirect") redirect(decision.to);
   if (decision.kind === "not-found" || state.kind !== "actor") notFound();
   return state;
+}
+
+export async function requireShell(area: Area): Promise<
+  Extract<SessionState, { kind: "actor" }> & {
+    organizations: MyOrganization[];
+  }
+> {
+  const state = await requireArea(area);
+  const organizations = await withTx(state.actor, (tx) =>
+    listMyOrganizations(tx, state.actor),
+  );
+  return { ...state, organizations };
 }

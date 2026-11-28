@@ -1,10 +1,10 @@
 import { AppShell } from "@/components/domain/shell/app-shell";
-import { requireArea } from "@/server/auth/guard";
+import { requireShell } from "@/server/auth/guard";
 
 export default async function Layout({ children }: LayoutProps<"/admin">) {
-  const { orgName } = await requireArea("/admin");
+  const { orgName, organizations } = await requireShell("/admin");
   return (
-    <AppShell area="admin" orgName={orgName}>
+    <AppShell area="admin" orgName={orgName} organizations={organizations}>
       {children}
     </AppShell>
   );
