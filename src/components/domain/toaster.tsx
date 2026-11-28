@@ -1,9 +1,12 @@
 "use client";
 
 /**
- * Toasts — ONLY for results of background or out-of-view work (DESIGN.md → How UI talks to the
- * server): "Uvoz je završen", "Link je kopiran". A form's own result belongs next to the form (inline
- * field errors, ErrorSummary), not in a toast.
+ * Toasts — for results the user cannot see where they acted (DESIGN.md → How UI talks to the server):
+ *   - background or out-of-view work: "Uvoz je završen", "Link je kopiran"
+ *   - the SUCCESS of a form or action whose own UI closes when it succeeds (a side panel, a dialog, an
+ *     inline edit mode, a row-menu action): "Lokacija je sačuvana" (D5-A3 company pages)
+ * A form's ERRORS still belong next to the form (inline field errors, ErrorSummary), never in a toast;
+ * notify.error is for failures that have no form to show them next to (a row-menu action).
  *
  *   import { notify } from "@/components/domain/toaster";
  *   notify.success(t("import.done"));        // closes after 5 s
