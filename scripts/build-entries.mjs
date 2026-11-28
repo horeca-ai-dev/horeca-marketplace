@@ -5,12 +5,16 @@
  *   src/migrate.ts → dist/migrate.mjs  (node dist/migrate.mjs)
  *   src/seed.ts    → dist/seed.mjs     (node dist/seed.mjs — one-shot demo data; production needs SEED_DEMO_PASSWORD)
  *   src/mock-services.ts → dist/mock-services.mjs  (node dist/mock-services.mjs — supplier stock API; no database)
+ *   src/pdf-probe.ts → dist/pdf-probe.mjs  (node dist/pdf-probe.mjs — D5-A4: a test PDF from the worker's Chromium)
  *
  * Only OUR code is bundled (the `@/…` imports resolve through tsconfig paths). Every npm package stays
  * external and is loaded at runtime from the image's production node_modules — pg-boss, sharp,
  * Playwright and the Drizzle migrator ship native binaries or read their own files, so bundling them
  * would break them. Next.js's standalone tracing does not cover these entries, which is why the image
  * carries a full production node_modules next to the standalone web server.
+ *
+ * Font files (.woff2) are inlined as base64 strings (src/types/assets.d.ts): the image has no
+ * src/app/fonts/, and a PDF must embed our typeface without reading the disk or the network.
  *
  * ESM output (.mjs): our code is ESM and pg-boss is ESM-only.
  */
@@ -22,6 +26,7 @@ await build({
     migrate: "src/migrate.ts",
     seed: "src/seed.ts",
     "mock-services": "src/mock-services.ts",
+    "pdf-probe": "src/pdf-probe.ts",
   },
   outdir: "dist",
   outExtension: { ".js": ".mjs" },
@@ -30,6 +35,7 @@ await build({
   format: "esm",
   target: "node26",
   packages: "external",
+  loader: { ".woff2": "base64" },
   sourcemap: true,
   logLevel: "info",
 });
