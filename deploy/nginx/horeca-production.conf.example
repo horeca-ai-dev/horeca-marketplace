@@ -60,7 +60,7 @@ server {
         proxy_read_timeout 1h;                                 # keep the WebSocket open
     }
 
-    # TODO(D6-A3): mock-services — card gateway's hosted page and API (decision 012 §6, §8); its admin
+    # TODO(D10): mock-services — card gateway's hosted page and API (decision 012 §6, §8); its admin
     # page behind basic auth here too.
     # location /gateway/ {
     #     proxy_pass http://127.0.0.1:<MOCK_SERVICES_PRODUCTION_PORT>;

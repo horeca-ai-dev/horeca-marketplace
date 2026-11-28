@@ -1,4 +1,5 @@
-# Local services: Postgres, Meilisearch, Mailpit, Garage (S3). The app itself runs on the host (`pnpm dev`).
+# Local services: Postgres, Meilisearch, Mailpit, Garage (S3). The app itself runs on the host (`pnpm dev`),
+# and so does mock-services (`pnpm mock:dev`); its container here is optional, behind `--profile mock`.
 # Values come from .env (copy .env.example). Every port is bound to 127.0.0.1 only.
 # Image versions are pinned exactly (newest patch at least two weeks old when chosen).
 name: horeca-dev
@@ -82,6 +83,45 @@ services:
       # The image has no shell or curl; `garage health` exits 1 while the cluster is unavailable
       # (also before the layout is applied by the setup script).
       test: ["CMD", "/garage", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+
+  # OPTIONAL — never started by a plain `up`. The normal way to run mock-services locally is
+  # `pnpm mock:dev` on the host (works the same on Windows, macOS and Linux). This container runs the
+  # BUNDLED entry instead, the way the server does:
+  #   pnpm build:entries && docker compose -f docker-compose.dev.yml --profile mock up -d mock-services
+  # It mounts ./dist and ./node_modules read-only (pure-JavaScript dependencies only: zod, pino). pnpm's
+  # node_modules is made of links: on Windows the mount may not resolve them — use `pnpm mock:dev` there.
+  # Do not run both at once: they share port 4010.
+  mock-services:
+    profiles: ["mock"]
+    # Same Node as the app image (Dockerfile → NODE_IMAGE).
+    image: node:26.13.1-trixie-slim@sha256:abe7e5a82b61a8ef67b315b85497c9e65173387ccf2f4a029248184b8e020be5
+    init: true
+    user: node
+    working_dir: /app
+    command: ["node", "--max-old-space-size=64", "dist/mock-services.mjs"]
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SUPPLIER_API_KEY: ${SUPPLIER_API_KEY:?set SUPPLIER_API_KEY in .env}
+      MOCK_SERVICES_HOST: 0.0.0.0 # inside the container; published on 127.0.0.1 only
+      MOCK_SERVICES_PORT: "4010"
+      MOCK_SUPPLIER_BEHAVIOUR: ${MOCK_SUPPLIER_BEHAVIOUR:-}
+      MOCK_DEFAULT_STOCK: ${MOCK_DEFAULT_STOCK:-}
+    ports:
+      - "127.0.0.1:4010:4010"
+    volumes:
+      - ./dist:/app/dist:ro
+      - ./node_modules:/app/node_modules:ro
+    mem_limit: 96m
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4010/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
       interval: 5s
       timeout: 3s
       retries: 20
