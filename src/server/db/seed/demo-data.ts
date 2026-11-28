@@ -36,6 +36,12 @@ export type DemoOrg = {
 
 const owner = (email: string, name: string) => ({ email, name });
 
+/**
+ * The organization slug of a demo organization. For a supplier it is also its EXTERNAL CODE: the id
+ * the supplier stock API uses in its paths (`/suppliers/demo-supplier-a/stock`, decision 012 §7).
+ */
+export const demoOrgSlug = (key: string) => `demo-${key}`;
+
 /** Order matters: an owner's FIRST membership is the organization a new session starts in. */
 export const DEMO_ORGS: DemoOrg[] = [
   {

@@ -24,7 +24,7 @@ import {
   user,
 } from "../schema";
 import type { Tx } from "../tx";
-import { DEMO_ORGS, demoUsers } from "./demo-data";
+import { DEMO_ORGS, demoOrgSlug, demoUsers } from "./demo-data";
 
 export type DemoSeedResult = {
   usersCreated: number;
@@ -63,7 +63,7 @@ export async function seedDemoOrganizations(
   const base = Date.now();
 
   for (const [index, spec] of DEMO_ORGS.entries()) {
-    const slug = `demo-${spec.key}`;
+    const slug = demoOrgSlug(spec.key);
     const [existing] = await tx
       .select({ id: organization.id })
       .from(organization)
