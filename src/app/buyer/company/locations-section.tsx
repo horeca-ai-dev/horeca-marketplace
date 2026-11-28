@@ -8,8 +8,8 @@
  *   ?archived=1     the archived locations are listed too (the page passes includeArchived)
  *   ?open=new       the side panel with an empty form
  *   ?open=<id>      the side panel with that location's form (an archived one: read-only note)
- * Saving closes the panel (removing ?open= re-renders the page with fresh data); the menu actions
- * stay on the page and call router.refresh().
+ * Opening and closing follow usePanelNavigation (one history entry; Back closes the panel). Saving
+ * closes the panel and re-reads the list; the menu actions stay on the page and call router.refresh().
  *
  * "Postavite kao podrazumijevanu" in the row menu sends the row's fields again with makeDefault —
  * the update replaces every field, so a change someone else saved to this location in the meantime is
@@ -23,7 +23,7 @@ import { useTranslations } from "next-intl";
 import { DataTable } from "@/components/domain/data-table/data-table";
 import { dataTableColumns } from "@/components/domain/data-table/columns";
 import { SidePanel } from "@/components/domain/data-table/side-panel";
-import { closeHref, openHref } from "@/components/domain/data-table/table-url";
+import { usePanelNavigation } from "@/components/domain/data-table/use-panel-navigation";
 import { EmptyState } from "@/components/domain/empty-state";
 import { ToneBadge } from "@/components/domain/status-badge/tone-badge";
 import { notify } from "@/components/domain/toaster";
@@ -50,11 +50,13 @@ export function LocationsSection({
   const router = useRouter();
   const pathname = usePathname();
   const query = useSearchParams().toString();
-  const openId = new URLSearchParams(query).get("open");
+  // The same history rules as the table rows: one entry per opened panel, Back closes it.
+  const panel = usePanelNavigation();
+  const openId = panel.openId;
   const [toArchive, setToArchive] = useState<LocationRow | null>(null);
 
-  const closePanel = () =>
-    router.push(closeHref(pathname, query), { scroll: false });
+  // After a save the list must show the new data (Back alone would restore the cached list).
+  const closePanel = () => panel.close({ refresh: true });
 
   const archivedToggle = (() => {
     const params = new URLSearchParams(query);
@@ -125,9 +127,7 @@ export function LocationsSection({
 
   const addButton = (
     <Button asChild variant="secondary">
-      <Link href={openHref(pathname, query, NEW)} scroll={false}>
-        {t("company.locations.add")}
-      </Link>
+      <Link {...panel.linkProps(NEW)}>{t("company.locations.add")}</Link>
     </Button>
   );
 
@@ -169,7 +169,7 @@ export function LocationsSection({
         rowAction={(row) =>
           row.archived ? null : (
             <Button asChild variant="ghost">
-              <Link href={openHref(pathname, query, row.id)} scroll={false}>
+              <Link {...panel.linkProps(row.id)}>
                 {t("company.locations.editAction")}
               </Link>
             </Button>
