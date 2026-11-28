@@ -148,6 +148,8 @@ export function CompanyForm({ userId }: { userId: string }) {
 
   return (
     <form
+      // No JS yet (slow or failed bundle): a native submit must never put fields in the URL.
+      method="post"
       noValidate
       // handleSubmit is called inside the event handler (not while rendering): onValid reads a ref.
       onSubmit={(event) =>

@@ -143,6 +143,8 @@ export function LocationForm({
 
   return (
     <form
+      // No JS yet (slow or failed bundle): a native submit must never put fields in the URL.
+      method="post"
       noValidate
       onSubmit={(event) =>
         void handleSubmit(onValid, () => {
