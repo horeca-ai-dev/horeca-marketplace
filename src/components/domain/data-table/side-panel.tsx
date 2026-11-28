@@ -9,10 +9,10 @@
  *   {open ? <SidePanel title={order.number} rowId={open}>…</SidePanel> : null}
  *
  * Non-modal: the list stays in view and usable — clicking another row's link switches the panel.
- * Esc or the close button removes `?open=` from the URL, and focus goes back to the row's link.
+ * Esc or the close button removes `?open=` (going Back when the panel's history entry is ours — see
+ * usePanelNavigation), and focus goes back to the row's link.
  * Clicks outside do not close it (a click on another row is a navigation, not a dismissal).
  */
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 import {
@@ -21,7 +21,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { closeHref } from "./table-url";
+import { usePanelNavigation } from "./use-panel-navigation";
 
 export function SidePanel({
   title,
@@ -34,9 +34,7 @@ export function SidePanel({
   children: ReactNode;
 }) {
   const t = useTranslations("table");
-  const router = useRouter();
-  const pathname = usePathname();
-  const query = useSearchParams().toString();
+  const panel = usePanelNavigation();
   // Closes at once; the URL change follows. Keyed by row, so opening another row re-opens it.
   const [closedFor, setClosedFor] = useState<string | null>(null);
 
@@ -47,7 +45,7 @@ export function SidePanel({
       onOpenChange={(open) => {
         if (open) return;
         setClosedFor(rowId);
-        router.push(closeHref(pathname, query), { scroll: false });
+        panel.close();
       }}
     >
       <SheetContent

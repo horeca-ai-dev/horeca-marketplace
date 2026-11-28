@@ -9,7 +9,8 @@
  * - Sort, page and the open row are links that change the URL (table-url.ts); the Server Component
  *   page reads them, queries, and passes the rows back in. No client-side fetching or sorting.
  * - Opening a row: the title cell is a real link (Tab + Enter), and a click anywhere on the row does
- *   the same. The page renders the detail in a <SidePanel> when `?open=` is set.
+ *   the same. The page renders the detail in a <SidePanel> when `?open=` is set. Opening pushes ONE
+ *   history entry (Back closes the panel), switching rows replaces it (use-panel-navigation.ts).
  * - One visible text action per row (`rowAction`) and the rest in a "⋯" menu (`rowMenu`, a list of
  *   DropdownMenuItems) whose accessible name includes the row (`rowLabel`).
  * - `loading`: skeleton rows of the same height. No rows: the designed `empty` state instead.
@@ -18,7 +19,7 @@
 import { useTable, type RowData } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ChevronsUpDown, Ellipsis } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { MouseEvent, ReactNode } from "react";
 import { ROW_HEIGHT, type Density } from "@/components/domain/page-skeleton";
@@ -44,7 +45,8 @@ import {
   type DataTableColumn,
   type DataTableColumnMeta,
 } from "./columns";
-import { openHref, pageHref, readSort, sortHref } from "./table-url";
+import { pageHref, readSort, sortHref } from "./table-url";
+import { usePanelNavigation } from "./use-panel-navigation";
 
 export type DataTableProps<TData extends RowData> = {
   /** Names the table for screen readers (rendered as a visually hidden caption). */
@@ -98,11 +100,12 @@ export function DataTable<TData extends RowData>({
 }: DataTableProps<TData>) {
   const t = useTranslations("table");
   const tCommon = useTranslations("common");
-  const router = useRouter();
   const pathname = usePathname();
   const query = useSearchParams().toString();
   const sort = readSort(query);
-  const openId = new URLSearchParams(query).get("open");
+  // Opening a row pushes one history entry; switching rows replaces it (use-panel-navigation.ts).
+  const panel = usePanelNavigation();
+  const openId = panel.openId;
 
   const table = useTable({
     features: dataTableFeatures,
@@ -120,10 +123,9 @@ export function DataTable<TData extends RowData>({
 
   if (!loading && rows.length === 0) return <>{empty}</>;
 
-  const rowHref = (id: string) => openHref(pathname, query, id);
   const onRowClick = (event: MouseEvent, id: string) => {
     if (!openable || isInteractive(event.target)) return;
-    router.push(rowHref(id), { scroll: false });
+    panel.open(id);
   };
 
   const menu = (row: TData) => {
@@ -157,8 +159,7 @@ export function DataTable<TData extends RowData>({
   const titleLink = (id: string, content: ReactNode) =>
     openable ? (
       <Link
-        href={rowHref(id)}
-        scroll={false}
+        {...panel.linkProps(id)}
         data-row-link={id}
         className="rounded-md font-medium text-foreground underline-offset-4 hover:underline"
       >
