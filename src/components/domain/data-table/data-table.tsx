@@ -58,6 +58,7 @@ export type DataTableProps<TData extends RowData> = {
   /** Rows open in a side panel through `?open=<id>`. */
   openable?: boolean;
   rowAction?: (row: TData) => ReactNode;
+  /** The row's "⋯" menu items; null / undefined = no menu for this row. */
   rowMenu?: (row: TData) => ReactNode;
   loading?: boolean;
   /** Shown instead of the table when there are no rows (an <EmptyState>). */
@@ -125,8 +126,10 @@ export function DataTable<TData extends RowData>({
     router.push(rowHref(id), { scroll: false });
   };
 
-  const menu = (row: TData) =>
-    rowMenu ? (
+  const menu = (row: TData) => {
+    // A row with no menu items (e.g. an archived record) gets no "⋯" button at all.
+    const items = rowMenu?.(row);
+    return items ? (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -138,9 +141,10 @@ export function DataTable<TData extends RowData>({
             <Icon icon={Ellipsis} />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">{rowMenu(row)}</DropdownMenuContent>
+        <DropdownMenuContent align="end">{items}</DropdownMenuContent>
       </DropdownMenu>
     ) : null;
+  };
 
   const actions = (row: TData) => (
     <div className="flex items-center justify-end gap-1">
