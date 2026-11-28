@@ -13,7 +13,8 @@
 # Runtime layout:
 #   /app/web           Next.js standalone output (+ .next/static, public) with its own traced node_modules
 #   /app/node_modules  full PRODUCTION dependencies for the bundled worker / migrate / mock-services entries
-#   /app/dist          worker.mjs, migrate.mjs, seed.mjs, mock-services.mjs (esbuild, scripts/build-entries.mjs)
+#   /app/dist          worker.mjs, migrate.mjs, seed.mjs, mock-services.mjs, pdf-probe.mjs (esbuild,
+#                      scripts/build-entries.mjs); pdf-probe = a by-hand check of Chromium + fonts (D5-A4)
 #   /app/migrations    SQL migrations (MIGRATIONS_DIR)
 #   /ms-playwright     Chromium headless shell for the worker (PLAYWRIGHT_BROWSERS_PATH)
 
