@@ -2,8 +2,12 @@
  * resolveActor() — session → Actor, for Server Components and Server Actions (D2-B3).
  *
  *   anonymous         no valid session                     → login page
- *   no-organization   logged in, no (valid) active org     → "Complete company setup"
+ *   no-organization   logged in, member of no usable org   → "Complete company setup"
  *   actor             logged in + verified member          → normal app
+ *
+ * The organization is the one the session names, when the user is (still) a member of it; otherwise the
+ * user's oldest usable membership (loadActorForSession, D7-A3) — so a refused switch, a removed membership
+ * or an old session never strands somebody who has a company on "Complete company setup".
  *
  * `cache()` makes it run once per request even when a layout, a page and an action all ask.
  * Lives outside src/server/domain because it uses Next.js (headers) and Better Auth.
@@ -12,7 +16,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { cache } from "react";
 import { getAuth } from "@/server/auth/auth";
-import { loadActor } from "@/server/db/queries/actor";
+import { loadActorForSession } from "@/server/db/queries/actor";
 import type { Actor } from "@/server/domain/actor";
 import { Unauthenticated } from "@/server/domain/errors";
 
@@ -30,11 +34,12 @@ export const resolveSession = cache(async (): Promise<SessionState> => {
   if (!session) return { kind: "anonymous" };
 
   const userId = session.user.id;
-  const organizationId = session.session.activeOrganizationId;
-  if (!organizationId) return { kind: "no-organization", userId };
-
-  // Never trust the session's organization on its own: re-check membership in the database.
-  const loaded = await loadActor(userId, organizationId);
+  // Never trust the session's organization on its own: membership is re-checked in the database, and a
+  // missing or stale organization falls back to the user's oldest usable membership.
+  const loaded = await loadActorForSession(
+    userId,
+    session.session.activeOrganizationId ?? null,
+  );
   return loaded
     ? { kind: "actor", ...loaded }
     : { kind: "no-organization", userId };
