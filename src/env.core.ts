@@ -15,7 +15,7 @@
  * Two ways a key is checked:
  *   1. When it is READ (the getters below): importing this file never throws — `next build`, drizzle-kit
  *      and the tests run without most variables.
- *   2. At startup, all at once: assertEnv("web" | "worker" | "migrate") checks every key that entry point
+ *   2. At startup, all at once: assertEnv("web" | "worker" | "migrate" | …) checks every key that entry point
  *      needs and lists every problem in one error, so a container with a missing or malformed variable
  *      refuses to boot (README → "Environment variables"). Error messages name keys, never values.
  *
@@ -89,6 +89,20 @@ const schema = {
   SUPPLIER_API_URL: url,
   SUPPLIER_API_KEY: nonEmpty,
 
+  /** mock-services only (D6-A3). The port is 4010 in every environment. */
+  MOCK_SERVICES_PORT: z.coerce.number().int().min(1).max(65535).default(4010),
+  /** 127.0.0.1 on a developer's machine; the container sets 0.0.0.0 (reachable on the Compose network only). */
+  MOCK_SERVICES_HOST: nonEmpty.default("127.0.0.1"),
+  /** JSON: behaviour per supplier external code — parsed and checked in src/mock-services/config.ts. */
+  MOCK_SUPPLIER_BEHAVIOUR: nonEmpty.default("{}"),
+  /** Quantity the mock answers for a SKU that is not in its seed data. */
+  MOCK_DEFAULT_STOCK: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(1_000_000)
+    .default(100),
+
   AI_ENABLED: flag,
   ANTHROPIC_API_KEY: nonEmpty,
   ANTHROPIC_MODEL: nonEmpty,
@@ -154,6 +168,15 @@ const ROLE_KEYS = {
     "BETTER_AUTH_URL",
     "BETTER_AUTH_SECRET",
   ],
+  // An external system: no database, no storage, no auth — only its own port, key and behaviour.
+  "mock-services": [
+    "LOG_LEVEL",
+    "SUPPLIER_API_KEY",
+    "MOCK_SERVICES_PORT",
+    "MOCK_SERVICES_HOST",
+    "MOCK_SUPPLIER_BEHAVIOUR",
+    "MOCK_DEFAULT_STOCK",
+  ],
 } as const satisfies Record<string, readonly Key[]>;
 
 export type EnvRole = keyof typeof ROLE_KEYS;
@@ -199,7 +222,11 @@ export function assertEnv(role: EnvRole): void {
 
   const keys: Key[] = [...ROLE_KEYS[role]];
   // The Claude API key is needed only when the AI features are switched on (stretch S3/S4).
-  if (role !== "migrate" && raw("AI_ENABLED") === "true")
+  if (
+    role !== "migrate" &&
+    role !== "mock-services" &&
+    raw("AI_ENABLED") === "true"
+  )
     keys.push("ANTHROPIC_API_KEY", "ANTHROPIC_MODEL");
 
   const problems: string[] = [];
@@ -319,8 +346,26 @@ export const env = {
   get SUPPLIER_API_URL() {
     return read("SUPPLIER_API_URL");
   },
+  /** Sent by web and worker as `Authorization: Bearer …`; mock-services checks it. */
   get SUPPLIER_API_KEY() {
     return read("SUPPLIER_API_KEY");
+  },
+
+  /** mock-services only: listen port (4010). */
+  get MOCK_SERVICES_PORT() {
+    return read("MOCK_SERVICES_PORT");
+  },
+  /** mock-services only: listen address. */
+  get MOCK_SERVICES_HOST() {
+    return read("MOCK_SERVICES_HOST");
+  },
+  /** mock-services only: raw JSON, see src/mock-services/config.ts. */
+  get MOCK_SUPPLIER_BEHAVIOUR() {
+    return read("MOCK_SUPPLIER_BEHAVIOUR");
+  },
+  /** mock-services only: quantity for SKUs outside its seed data. */
+  get MOCK_DEFAULT_STOCK() {
+    return read("MOCK_DEFAULT_STOCK");
   },
 
   /** AI stretch features; off unless explicitly "true". */
